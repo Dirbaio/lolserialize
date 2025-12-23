@@ -38,11 +38,7 @@ pub fn check(schema: &Schema) -> Vec<CheckError> {
         if items.len() > 1 {
             let mut err = CheckError::new(format!("duplicate definition of `{}`", name));
             for (i, item) in items.iter().enumerate() {
-                let label = if i == 0 {
-                    "first defined here"
-                } else {
-                    "redefined here"
-                };
+                let label = if i == 0 { "first defined here" } else { "redefined here" };
                 let color = if i == 0 { Color::Blue } else { Color::Red };
                 err = err.label(item_name_span(item), label, color);
             }
@@ -109,11 +105,7 @@ fn check_message(m: &Message, definitions: &HashMap<&str, Vec<&Spanned<Item>>>, 
         // Check for zero index (reserved for termination)
         if field.node.index.node == 0 {
             errors.push(
-                CheckError::new(format!(
-                    "index 0 is reserved in message `{}`",
-                    m.name.node
-                ))
-                .label(
+                CheckError::new(format!("index 0 is reserved in message `{}`", m.name.node)).label(
                     field.node.index.span.clone(),
                     "indices must be >= 1",
                     Color::Red,
@@ -199,11 +191,7 @@ fn check_union(u: &Union, definitions: &HashMap<&str, Vec<&Spanned<Item>>>, erro
         // Check for zero index (reserved for termination in wire format)
         if variant.node.index.node == 0 {
             errors.push(
-                CheckError::new(format!(
-                    "index 0 is reserved in union `{}`",
-                    u.name.node
-                ))
-                .label(
+                CheckError::new(format!("index 0 is reserved in union `{}`", u.name.node)).label(
                     variant.node.index.span.clone(),
                     "indices must be >= 1",
                     Color::Red,
@@ -235,10 +223,11 @@ fn check_type(ty: &Spanned<Type>, definitions: &HashMap<&str, Vec<&Spanned<Item>
     match &ty.node {
         Type::Named(name) => {
             if !definitions.contains_key(name.as_str()) {
-                errors.push(
-                    CheckError::new(format!("undefined type `{}`", name))
-                        .label(ty.span.clone(), "not found", Color::Red),
-                );
+                errors.push(CheckError::new(format!("undefined type `{}`", name)).label(
+                    ty.span.clone(),
+                    "not found",
+                    Color::Red,
+                ));
             }
         }
         Type::Array(inner) => check_type(inner, definitions, errors),
@@ -271,15 +260,10 @@ fn item_name_span(item: &Spanned<Item>) -> Span {
 pub fn print_errors(filename: &str, src: &str, errors: Vec<CheckError>) {
     for err in errors {
         let start = err.labels.first().map(|(s, _, _)| s.start).unwrap_or(0);
-        let mut report = Report::build(ReportKind::Error, filename, start)
-            .with_message(&err.message);
+        let mut report = Report::build(ReportKind::Error, filename, start).with_message(&err.message);
 
         for (span, message, color) in err.labels {
-            report = report.with_label(
-                Label::new((filename, span))
-                    .with_message(message)
-                    .with_color(color),
-            );
+            report = report.with_label(Label::new((filename, span)).with_message(message).with_color(color));
         }
 
         report.finish().print((filename, Source::from(src))).unwrap();

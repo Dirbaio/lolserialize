@@ -40,10 +40,7 @@ fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
         just('?').to(Token::Question),
     ));
 
-    let comment = just("//")
-        .then(take_until(just('\n')))
-        .padded()
-        .ignored();
+    let comment = just("//").then(take_until(just('\n'))).padded().ignored();
 
     let token = int.or(ident).or(symbol);
 
@@ -272,34 +269,23 @@ fn parser() -> impl Parser<Token, Schema, Error = Simple<Token>> + Clone {
 
     let item = choice((struct_def, message_def, enum_def, union_def));
 
-    item.repeated()
-        .then_ignore(end())
-        .map(|items| Schema { items })
+    item.repeated().then_ignore(end()).map(|items| Schema { items })
 }
 
 pub fn parse(src: &str) -> Result<Schema, Vec<Simple<std::string::String>>> {
     let (tokens, lex_errs) = lexer().parse_recovery(src);
 
     if !lex_errs.is_empty() {
-        return Err(lex_errs
-            .into_iter()
-            .map(|e| e.map(|c| c.to_string()))
-            .collect());
+        return Err(lex_errs.into_iter().map(|e| e.map(|c| c.to_string())).collect());
     }
 
     let tokens = tokens.unwrap();
     let len = src.len();
 
-    let (schema, parse_errs) = parser().parse_recovery(chumsky::Stream::from_iter(
-        len..len + 1,
-        tokens.into_iter(),
-    ));
+    let (schema, parse_errs) = parser().parse_recovery(chumsky::Stream::from_iter(len..len + 1, tokens.into_iter()));
 
     if !parse_errs.is_empty() {
-        return Err(parse_errs
-            .into_iter()
-            .map(|e| e.map(|t| t.to_string()))
-            .collect());
+        return Err(parse_errs.into_iter().map(|e| e.map(|t| t.to_string())).collect());
     }
 
     Ok(schema.unwrap())
@@ -344,9 +330,6 @@ pub fn print_errors(filename: &str, src: &str, errs: Vec<Simple<std::string::Str
             report
         };
 
-        report
-            .finish()
-            .print((filename, Source::from(src)))
-            .unwrap();
+        report.finish().print((filename, Source::from(src))).unwrap();
     }
 }

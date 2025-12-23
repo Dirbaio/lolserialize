@@ -385,9 +385,7 @@ impl Decode for f64 {
         if buf.len() < 8 {
             return Err(DecodeError::UnexpectedEof);
         }
-        let bytes = [
-            buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7],
-        ];
+        let bytes = [buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7]];
         *buf = &buf[8..];
         Ok(f64::from_le_bytes(bytes))
     }
