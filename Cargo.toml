@@ -1,8 +1,9 @@
-[package]
-name = "lolserialize"
-version = "0.1.0"
-edition = "2024"
+[workspace]
+resolver = "2"
+members = [
+    "lolserialize-runtime",
+    "lolserialize-compiler",
+]
 
-[dependencies]
-chumsky = "0.9"
-ariadne = "0.4"
+[workspace.dependencies]
+lolserialize-runtime = { path = "lolserialize-runtime" }
