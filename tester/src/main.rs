@@ -226,23 +226,18 @@ fn launch_test_binary(suite: &str, lang: Language) -> Result<Child, String> {
         }
     ));
 
-    // Get the path to volex-compiler relative to the tester directory
-    let compiler_manifest = tester_dir
-        .parent()
-        .ok_or("failed to get parent dir")?
-        .join("volexc/Cargo.toml");
-
     let compile_output = Command::new("cargo")
         .args(&[
             "run",
             "--bin",
-            "volex",
-            "--manifest-path",
-            compiler_manifest.to_str().unwrap(),
+            "volexc",
             "--",
+            "--input",
+            schema_path.to_str().unwrap(),
+            "--output",
+            "-",
             "--lang",
             lang_flag,
-            schema_path.to_str().unwrap(),
         ])
         .output()
         .map_err(|e| format!("failed to run compiler: {}", e))?;

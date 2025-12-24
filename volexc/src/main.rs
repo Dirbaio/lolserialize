@@ -1,90 +1,90 @@
 mod checker;
-mod codegen;
 mod codegen_go;
+mod codegen_rust;
 mod codegen_typescript;
 mod parser;
 mod schema;
 
+use std::io::{Read, Write};
+
+use clap::Parser;
+
+#[derive(Parser)]
+#[command(name = "volex")]
+#[command(about = "Volex schema compiler", long_about = None)]
+struct Cli {
+    /// Input schema file (use '-' for stdin)
+    #[arg(short, long, value_name = "FILE")]
+    input: String,
+
+    /// Output file (use '-' for stdout)
+    #[arg(short, long, value_name = "FILE")]
+    output: String,
+
+    /// Target language
+    #[arg(long, value_enum, default_value = "rust")]
+    lang: Language,
+
+    /// Package name for Go output
+    #[arg(long, default_value = "main")]
+    go_package: String,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+enum Language {
+    Rust,
+    Go,
+    Typescript,
+}
+
 fn main() {
-    let args: Vec<String> = std::env::args().collect();
+    let cli = Cli::parse();
 
-    if args.len() < 2 {
-        eprintln!("Usage: volex [--lang <rust|go|typescript>] [--package <name>] <file.vol>");
-        eprintln!();
-        eprintln!("Options:");
-        eprintln!("  --lang <rust|go|typescript>    Target language (default: rust)");
-        eprintln!("  --package <name>               Package name for Go output (default: main)");
-        std::process::exit(1);
-    }
+    // Read input
+    let src = if cli.input == "-" {
+        let mut buffer = String::new();
+        std::io::stdin().read_to_string(&mut buffer).unwrap_or_else(|e| {
+            eprintln!("Error reading from stdin: {}", e);
+            std::process::exit(1);
+        });
+        buffer
+    } else {
+        std::fs::read_to_string(&cli.input).unwrap_or_else(|e| {
+            eprintln!("Error reading file '{}': {}", cli.input, e);
+            std::process::exit(1);
+        })
+    };
 
-    let mut lang = "rust";
-    let mut package = "main";
-    let mut filename = None;
-    let mut i = 1;
-
-    while i < args.len() {
-        match args[i].as_str() {
-            "--lang" => {
-                if i + 1 >= args.len() {
-                    eprintln!("Error: --lang requires an argument");
-                    std::process::exit(1);
-                }
-                lang = &args[i + 1];
-                if lang != "rust" && lang != "go" && lang != "typescript" {
-                    eprintln!("Error: language must be 'rust', 'go', or 'typescript'");
-                    std::process::exit(1);
-                }
-                i += 2;
-            }
-            "--package" => {
-                if i + 1 >= args.len() {
-                    eprintln!("Error: --package requires an argument");
-                    std::process::exit(1);
-                }
-                package = &args[i + 1];
-                i += 2;
-            }
-            arg if !arg.starts_with("--") => {
-                filename = Some(arg);
-                i += 1;
-            }
-            _ => {
-                eprintln!("Error: unknown option '{}'", args[i]);
-                std::process::exit(1);
-            }
-        }
-    }
-
-    let filename = filename.unwrap_or_else(|| {
-        eprintln!("Error: no input file specified");
-        std::process::exit(1);
-    });
-
-    let src = std::fs::read_to_string(filename).unwrap_or_else(|e| {
-        eprintln!("Error reading file '{}': {}", filename, e);
-        std::process::exit(1);
-    });
+    let input_name = if cli.input == "-" { "<stdin>" } else { &cli.input };
 
     let schema = match parser::parse(&src) {
         Ok(schema) => schema,
         Err(errs) => {
-            parser::print_errors(filename, &src, errs);
+            parser::print_errors(input_name, &src, errs);
             std::process::exit(1);
         }
     };
 
     let errors = checker::check(&schema);
     if !errors.is_empty() {
-        checker::print_errors(filename, &src, errors);
+        checker::print_errors(input_name, &src, errors);
         std::process::exit(1);
     }
 
-    let code = match lang {
-        "rust" => codegen::generate(&schema),
-        "go" => codegen_go::generate(&schema, package),
-        "typescript" => codegen_typescript::generate(&schema),
-        _ => unreachable!(),
+    let code = match cli.lang {
+        Language::Rust => codegen_rust::generate(&schema),
+        Language::Go => codegen_go::generate(&schema, &cli.go_package),
+        Language::Typescript => codegen_typescript::generate(&schema),
     };
 
-    print!("{}", code);
+    // Write output
+    if cli.output == "-" {
+        print!("{}", code);
+        std::io::stdout().flush().unwrap();
+    } else {
+        std::fs::write(&cli.output, code).unwrap_or_else(|e| {
+            eprintln!("Error writing file '{}': {}", cli.output, e);
+            std::process::exit(1);
+        });
+    }
 }
