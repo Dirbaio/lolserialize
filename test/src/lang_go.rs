@@ -62,22 +62,24 @@ replace github.com/lolserialize/runtime => ../../../lolserialize-go-runtime
 import (
 	"bufio"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"os"
+
+	jsonv1 "encoding/json"
+	"encoding/json/v2"
 )
 
 type Request struct {{
 	Cmd  string          `json:"cmd"`
 	Type string          `json:"type"`
-	Json json.RawMessage `json:"json,omitempty"`
-	Hex  string          `json:"hex,omitempty"`
+	Json jsonv1.RawMessage `json:"json"`
+	Hex  string          `json:"hex"`
 }}
 
 type TestResponse struct {{
 	Ok     bool        `json:"ok"`
-	Result interface{{}} `json:"result,omitempty"`
-	Error  string      `json:"error,omitempty"`
+	Result interface{{}} `json:"result"`
+	Error  string      `json:"error"`
 }}
 
 func encodeType(typeName string, jsonData []byte) (string, error) {{
@@ -173,6 +175,7 @@ func main() {{
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
+        .env("GOEXPERIMENT", "jsonv2")
         .spawn()
         .map_err(|e| format!("go run: {}", e))?;
 

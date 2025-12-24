@@ -45,14 +45,7 @@ impl<'a> GoCodeGenerator<'a> {
         // Check if we need encoding/json (for enums, unions, structs/messages with []uint8 fields)
         let needs_json = self.schema.items.iter().any(|item| match &item.node {
             Item::Enum(_) | Item::Union(_) => true,
-            Item::Struct(s) => s
-                .fields
-                .iter()
-                .any(|f| matches!(&f.ty.node, Type::Array(inner) if matches!(&inner.node, Type::U8))),
-            Item::Message(m) => m
-                .fields
-                .iter()
-                .any(|f| matches!(&f.ty.node, Type::Array(inner) if matches!(&inner.node, Type::U8))),
+            _ => false,
         });
 
         self.output.push_str("import (\n");
@@ -104,6 +97,15 @@ impl<'a> GoCodeGenerator<'a> {
         format!("*{}", self.go_type(ty))
     }
 
+    fn json_tag(&self, field_name: &str, ty: &Type) -> String {
+        // Check if this is a []uint8 (byte array) which needs format:array
+        if matches!(ty, Type::Array(inner) if matches!(&inner.node, Type::U8)) {
+            format!("`json:\"{},format:array\"`", field_name)
+        } else {
+            format!("`json:\"{}\"`", field_name)
+        }
+    }
+
     fn gen_struct(&mut self, s: &Struct) {
         writeln!(self.output, "type {} struct {{", s.name.node).unwrap();
 
@@ -116,10 +118,10 @@ impl<'a> GoCodeGenerator<'a> {
             // Don't use omitempty - we want to serialize null for optional fields
             writeln!(
                 self.output,
-                "\t{} {} `json:\"{}\"`",
+                "\t{} {} {}",
                 to_pascal_case(&field.name.node),
                 ty,
-                &field.name.node
+                self.json_tag(&field.name.node, &field.ty.node)
             )
             .unwrap();
         }
@@ -210,150 +212,6 @@ impl<'a> GoCodeGenerator<'a> {
 
         self.output.push_str("\treturn result, nil\n");
         self.output.push_str("}\n");
-
-        // Generate custom JSON marshaling for structs with []uint8 or float fields
-        self.gen_struct_json_marshaling(s);
-    }
-
-    fn gen_struct_json_marshaling(&mut self, s: &Struct) {
-        // Check if any field needs custom marshaling ([]uint8)
-        let has_u8_array = s
-            .fields
-            .iter()
-            .any(|f| matches!(&f.ty.node, Type::Array(inner) if matches!(&inner.node, Type::U8)));
-
-        if !has_u8_array {
-            return;
-        }
-
-        // Generate MarshalJSON to convert []uint8 to JSON array instead of base64 string
-        writeln!(
-            self.output,
-            "\nfunc (s {}) MarshalJSON() ([]byte, error) {{",
-            s.name.node
-        )
-        .unwrap();
-        writeln!(self.output, "\ttype Alias {}", s.name.node).unwrap();
-        writeln!(self.output, "\taux := &struct {{").unwrap();
-
-        for field in &s.fields {
-            let field_name = to_pascal_case(&field.name.node);
-            if let Type::Array(inner) = &field.ty.node {
-                if matches!(&inner.node, Type::U8) {
-                    let ty = if field.optional {
-                        "*[]interface{}".to_string()
-                    } else {
-                        "[]interface{}".to_string()
-                    };
-                    writeln!(self.output, "\t\t{} {} `json:\"{}\"`", field_name, ty, &field.name.node).unwrap();
-                }
-            }
-        }
-
-        writeln!(self.output, "\t\t*Alias").unwrap();
-        writeln!(self.output, "\t}}{{").unwrap();
-        writeln!(self.output, "\t\tAlias: (*Alias)(&s),").unwrap();
-        writeln!(self.output, "\t}}").unwrap();
-
-        for field in &s.fields {
-            let field_name = to_pascal_case(&field.name.node);
-            if let Type::Array(inner) = &field.ty.node {
-                if matches!(&inner.node, Type::U8) {
-                    if field.optional {
-                        writeln!(self.output, "\tif s.{} != nil {{", field_name).unwrap();
-                        writeln!(self.output, "\t\tarr := make([]interface{{}}, len(*s.{}))", field_name).unwrap();
-                        writeln!(self.output, "\t\tfor i, v := range *s.{} {{", field_name).unwrap();
-                        writeln!(self.output, "\t\t\tarr[i] = v").unwrap();
-                        writeln!(self.output, "\t\t}}").unwrap();
-                        writeln!(self.output, "\t\taux.{} = &arr", field_name).unwrap();
-                        writeln!(self.output, "\t}}").unwrap();
-                    } else {
-                        writeln!(
-                            self.output,
-                            "\taux.{} = make([]interface{{}}, len(s.{}))",
-                            field_name, field_name
-                        )
-                        .unwrap();
-                        writeln!(self.output, "\tfor i, v := range s.{} {{", field_name).unwrap();
-                        writeln!(self.output, "\t\taux.{}[i] = v", field_name).unwrap();
-                        writeln!(self.output, "\t}}").unwrap();
-                    }
-                }
-            }
-        }
-
-        writeln!(self.output, "\treturn json.Marshal(aux)").unwrap();
-        writeln!(self.output, "}}").unwrap();
-
-        // Generate UnmarshalJSON
-        writeln!(
-            self.output,
-            "\nfunc (s *{}) UnmarshalJSON(data []byte) error {{",
-            s.name.node
-        )
-        .unwrap();
-        writeln!(self.output, "\ttype Alias {}", s.name.node).unwrap();
-        writeln!(self.output, "\taux := &struct {{").unwrap();
-
-        for field in &s.fields {
-            let field_name = to_pascal_case(&field.name.node);
-            if let Type::Array(inner) = &field.ty.node {
-                if matches!(&inner.node, Type::U8) {
-                    let ty = if field.optional {
-                        "*[]interface{}".to_string()
-                    } else {
-                        "[]interface{}".to_string()
-                    };
-                    writeln!(self.output, "\t\t{} {} `json:\"{}\"`", field_name, ty, &field.name.node).unwrap();
-                }
-            }
-        }
-
-        writeln!(self.output, "\t\t*Alias").unwrap();
-        writeln!(self.output, "\t}}{{").unwrap();
-        writeln!(self.output, "\t\tAlias: (*Alias)(s),").unwrap();
-        writeln!(self.output, "\t}}").unwrap();
-
-        writeln!(self.output, "\tif err := json.Unmarshal(data, &aux); err != nil {{").unwrap();
-        writeln!(self.output, "\t\treturn err").unwrap();
-        writeln!(self.output, "\t}}").unwrap();
-
-        for field in &s.fields {
-            let field_name = to_pascal_case(&field.name.node);
-            if let Type::Array(inner) = &field.ty.node {
-                if matches!(&inner.node, Type::U8) {
-                    if field.optional {
-                        writeln!(self.output, "\tif aux.{} != nil {{", field_name).unwrap();
-                        writeln!(self.output, "\t\tarr := make([]uint8, len(*aux.{}))", field_name).unwrap();
-                        writeln!(self.output, "\t\tfor i, v := range *aux.{} {{", field_name).unwrap();
-                        writeln!(self.output, "\t\t\tif f, ok := v.(float64); ok {{ arr[i] = uint8(f) }}").unwrap();
-                        writeln!(self.output, "\t\t}}").unwrap();
-                        writeln!(self.output, "\t\ts.{} = &arr", field_name).unwrap();
-                        writeln!(self.output, "\t}}").unwrap();
-                    } else {
-                        writeln!(self.output, "\tif aux.{} != nil {{", field_name).unwrap();
-                        writeln!(
-                            self.output,
-                            "\t\ts.{} = make([]uint8, len(aux.{}))",
-                            field_name, field_name
-                        )
-                        .unwrap();
-                        writeln!(self.output, "\t\tfor i, v := range aux.{} {{", field_name).unwrap();
-                        writeln!(
-                            self.output,
-                            "\t\t\tif f, ok := v.(float64); ok {{ s.{}[i] = uint8(f) }}",
-                            field_name
-                        )
-                        .unwrap();
-                        writeln!(self.output, "\t\t}}").unwrap();
-                        writeln!(self.output, "\t}}").unwrap();
-                    }
-                }
-            }
-        }
-
-        writeln!(self.output, "\treturn nil").unwrap();
-        writeln!(self.output, "}}").unwrap();
     }
 
     fn gen_message(&mut self, m: &Message) {
@@ -368,10 +226,10 @@ impl<'a> GoCodeGenerator<'a> {
             // Don't use omitempty - we want to serialize null for optional fields
             writeln!(
                 self.output,
-                "\t{} {} `json:\"{}\"`",
+                "\t{} {} {}",
                 to_pascal_case(&field.name.node),
                 ty,
-                &field.name.node
+                self.json_tag(&field.name.node, &field.ty.node)
             )
             .unwrap();
         }
@@ -441,150 +299,6 @@ impl<'a> GoCodeGenerator<'a> {
         self.output.push_str("\t}\n");
         self.output.push_str("\treturn result, nil\n");
         self.output.push_str("}\n");
-
-        // Generate custom JSON marshaling for messages with []uint8 fields
-        self.gen_message_json_marshaling(m);
-    }
-
-    fn gen_message_json_marshaling(&mut self, m: &Message) {
-        // Check if any field needs custom marshaling ([]uint8)
-        let has_u8_array = m
-            .fields
-            .iter()
-            .any(|f| matches!(&f.ty.node, Type::Array(inner) if matches!(&inner.node, Type::U8)));
-
-        if !has_u8_array {
-            return;
-        }
-
-        // Generate MarshalJSON to convert []uint8 to JSON array instead of base64 string
-        writeln!(
-            self.output,
-            "\nfunc (m {}) MarshalJSON() ([]byte, error) {{",
-            m.name.node
-        )
-        .unwrap();
-        writeln!(self.output, "\ttype Alias {}", m.name.node).unwrap();
-        writeln!(self.output, "\taux := &struct {{").unwrap();
-
-        for field in &m.fields {
-            let field_name = to_pascal_case(&field.name.node);
-            if let Type::Array(inner) = &field.ty.node {
-                if matches!(&inner.node, Type::U8) {
-                    let ty = if field.optional {
-                        "*[]interface{}".to_string()
-                    } else {
-                        "[]interface{}".to_string()
-                    };
-                    writeln!(self.output, "\t\t{} {} `json:\"{}\"`", field_name, ty, &field.name.node).unwrap();
-                }
-            }
-        }
-
-        writeln!(self.output, "\t\t*Alias").unwrap();
-        writeln!(self.output, "\t}}{{").unwrap();
-        writeln!(self.output, "\t\tAlias: (*Alias)(&m),").unwrap();
-        writeln!(self.output, "\t}}").unwrap();
-
-        for field in &m.fields {
-            let field_name = to_pascal_case(&field.name.node);
-            if let Type::Array(inner) = &field.ty.node {
-                if matches!(&inner.node, Type::U8) {
-                    if field.optional {
-                        writeln!(self.output, "\tif m.{} != nil {{", field_name).unwrap();
-                        writeln!(self.output, "\t\tarr := make([]interface{{}}, len(*m.{}))", field_name).unwrap();
-                        writeln!(self.output, "\t\tfor i, v := range *m.{} {{", field_name).unwrap();
-                        writeln!(self.output, "\t\t\tarr[i] = v").unwrap();
-                        writeln!(self.output, "\t\t}}").unwrap();
-                        writeln!(self.output, "\t\taux.{} = &arr", field_name).unwrap();
-                        writeln!(self.output, "\t}}").unwrap();
-                    } else {
-                        writeln!(
-                            self.output,
-                            "\taux.{} = make([]interface{{}}, len(m.{}))",
-                            field_name, field_name
-                        )
-                        .unwrap();
-                        writeln!(self.output, "\tfor i, v := range m.{} {{", field_name).unwrap();
-                        writeln!(self.output, "\t\taux.{}[i] = v", field_name).unwrap();
-                        writeln!(self.output, "\t}}").unwrap();
-                    }
-                }
-            }
-        }
-
-        writeln!(self.output, "\treturn json.Marshal(aux)").unwrap();
-        writeln!(self.output, "}}").unwrap();
-
-        // Generate UnmarshalJSON
-        writeln!(
-            self.output,
-            "\nfunc (m *{}) UnmarshalJSON(data []byte) error {{",
-            m.name.node
-        )
-        .unwrap();
-        writeln!(self.output, "\ttype Alias {}", m.name.node).unwrap();
-        writeln!(self.output, "\taux := &struct {{").unwrap();
-
-        for field in &m.fields {
-            let field_name = to_pascal_case(&field.name.node);
-            if let Type::Array(inner) = &field.ty.node {
-                if matches!(&inner.node, Type::U8) {
-                    let ty = if field.optional {
-                        "*[]interface{}".to_string()
-                    } else {
-                        "[]interface{}".to_string()
-                    };
-                    writeln!(self.output, "\t\t{} {} `json:\"{}\"`", field_name, ty, &field.name.node).unwrap();
-                }
-            }
-        }
-
-        writeln!(self.output, "\t\t*Alias").unwrap();
-        writeln!(self.output, "\t}}{{").unwrap();
-        writeln!(self.output, "\t\tAlias: (*Alias)(m),").unwrap();
-        writeln!(self.output, "\t}}").unwrap();
-
-        writeln!(self.output, "\tif err := json.Unmarshal(data, &aux); err != nil {{").unwrap();
-        writeln!(self.output, "\t\treturn err").unwrap();
-        writeln!(self.output, "\t}}").unwrap();
-
-        for field in &m.fields {
-            let field_name = to_pascal_case(&field.name.node);
-            if let Type::Array(inner) = &field.ty.node {
-                if matches!(&inner.node, Type::U8) {
-                    if field.optional {
-                        writeln!(self.output, "\tif aux.{} != nil {{", field_name).unwrap();
-                        writeln!(self.output, "\t\tarr := make([]uint8, len(*aux.{}))", field_name).unwrap();
-                        writeln!(self.output, "\t\tfor i, v := range *aux.{} {{", field_name).unwrap();
-                        writeln!(self.output, "\t\t\tif f, ok := v.(float64); ok {{ arr[i] = uint8(f) }}").unwrap();
-                        writeln!(self.output, "\t\t}}").unwrap();
-                        writeln!(self.output, "\t\tm.{} = &arr", field_name).unwrap();
-                        writeln!(self.output, "\t}}").unwrap();
-                    } else {
-                        writeln!(self.output, "\tif aux.{} != nil {{", field_name).unwrap();
-                        writeln!(
-                            self.output,
-                            "\t\tm.{} = make([]uint8, len(aux.{}))",
-                            field_name, field_name
-                        )
-                        .unwrap();
-                        writeln!(self.output, "\t\tfor i, v := range aux.{} {{", field_name).unwrap();
-                        writeln!(
-                            self.output,
-                            "\t\t\tif f, ok := v.(float64); ok {{ m.{}[i] = uint8(f) }}",
-                            field_name
-                        )
-                        .unwrap();
-                        writeln!(self.output, "\t\t}}").unwrap();
-                        writeln!(self.output, "\t}}").unwrap();
-                    }
-                }
-            }
-        }
-
-        writeln!(self.output, "\treturn nil").unwrap();
-        writeln!(self.output, "}}").unwrap();
     }
 
     fn gen_enum(&mut self, e: &Enum) {
