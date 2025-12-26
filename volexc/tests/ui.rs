@@ -108,10 +108,7 @@ fn ui_tests() {
 
     assert!(status.success(), "Failed to build volexc");
 
-    let volexc_path = Path::new(manifest_dir)
-        .parent()
-        .unwrap()
-        .join("target/release/volexc");
+    let volexc_path = Path::new(manifest_dir).parent().unwrap().join("target/release/volexc");
 
     // Collect all .vol files
     let mut test_files: Vec<PathBuf> = fs::read_dir(&ui_dir)
@@ -119,11 +116,7 @@ fn ui_tests() {
         .filter_map(|entry| {
             let entry = entry.ok()?;
             let path = entry.path();
-            if path.extension()? == "vol" {
-                Some(path)
-            } else {
-                None
-            }
+            if path.extension()? == "vol" { Some(path) } else { None }
         })
         .collect();
 
@@ -137,8 +130,7 @@ fn ui_tests() {
         let test_name = test_file.file_stem().unwrap().to_str().unwrap();
 
         // Parse test configuration from comments
-        let content = fs::read_to_string(&test_file)
-            .expect("Failed to read test file");
+        let content = fs::read_to_string(&test_file).expect("Failed to read test file");
         let config = TestConfig::parse(&content);
 
         // Run test for each configured language
@@ -159,7 +151,7 @@ fn ui_tests() {
                 .arg("--input")
                 .arg(&test_file)
                 .arg("--output")
-                .arg("-")  // Output to stdout
+                .arg("-") // Output to stdout
                 .arg("--lang")
                 .arg(&language)
                 .output()
@@ -218,12 +210,10 @@ fn ui_tests() {
 
             // Read expected output
             let expected_output = if output_file.exists() {
-                fs::read_to_string(&output_file)
-                    .expect("Failed to read .out file")
+                fs::read_to_string(&output_file).expect("Failed to read .out file")
             } else {
                 // If .out file doesn't exist, create it with the actual output
-                fs::write(&output_file, &actual_output)
-                    .expect("Failed to write .out file");
+                fs::write(&output_file, &actual_output).expect("Failed to write .out file");
                 println!("Created {}", output_file.display());
                 actual_output.clone()
             };
