@@ -1,7 +1,9 @@
-Error: found end of input but expected "}"
-   ╭─[parse_unclosed_map.vol:4:3]
+Error: found end of input expected identifier, or '}'
+   ╭─[ parse_unclosed_map.vol:4:3 ]
    │
+ 4 │ }
+   │   │ 
+   │   ╰─ Unexpected end of input
    │ 
-   │ 
-   │ Note: Expected one of: '}'
+   │ Note: Expected one of: identifier, '}'
 ───╯

@@ -1,5 +1,5 @@
 Error: undefined type `UndefinedType`
-   ╭─[check_undefined_type_message.vol:3:10]
+   ╭─[ check_undefined_type_message.vol:3:10 ]
    │
  3 │     bar: UndefinedType = 1
    │          ──────┬──────  

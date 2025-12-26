@@ -1,5 +1,5 @@
 Error: duplicate index 1 in union `Foo`
-   ╭─[check_duplicate_union_index.vol:3:16]
+   ╭─[ check_duplicate_union_index.vol:3:16 ]
    │
  3 │     Bar(u32) = 1
    │                ┬  

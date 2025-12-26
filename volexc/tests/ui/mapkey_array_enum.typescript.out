@@ -1,5 +1,5 @@
 Error: invalid map key type: arrays cannot be used as map keys in TypeScript
-    ╭─[mapkey_array_enum.vol:11:12]
+    ╭─[ mapkey_array_enum.vol:11:12 ]
     │
  11 │     data: {[Status]:string}
     │            ────┬───  

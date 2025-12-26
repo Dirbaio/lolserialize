@@ -1,5 +1,5 @@
 Error: undefined type `UndefinedType`
-   ╭─[check_undefined_type_array.vol:3:11]
+   ╭─[ check_undefined_type_array.vol:3:11 ]
    │
  3 │     bar: [UndefinedType]
    │           ──────┬──────  

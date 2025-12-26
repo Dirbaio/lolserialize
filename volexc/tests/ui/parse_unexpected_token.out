@@ -1,9 +1,9 @@
-Error: found "}" but expected one of ":", "?"
-   ╭─[parse_unexpected_token.vol:4:1]
+Error: found '}' expected '?', or ':'
+   ╭─[ parse_unexpected_token.vol:4:1 ]
    │
  4 │ }
    │ ┬  
    │ ╰── Unexpected '}'
    │ 
-   │ Note: Expected one of: ':', '?'
+   │ Note: Expected one of: '?', ':'
 ───╯

@@ -1,5 +1,5 @@
-Error: found end of input but expected "*"
-   ╭─[lex_unclosed_comment.vol:5:3]
+Error: found end of input expected any, or '*'
+   ╭─[ lex_unclosed_comment.vol:5:3 ]
    │
  5 │ }
    │   │ 

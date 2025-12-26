@@ -1,9 +1,9 @@
-Error: found "u32" but expected one of "=", "("
-   ╭─[parse_missing_paren_union.vol:3:9]
+Error: found 'u32' expected '(', or '='
+   ╭─[ parse_missing_paren_union.vol:3:9 ]
    │
  3 │     Bar u32) = 1
    │         ─┬─  
    │          ╰─── Unexpected 'u32'
    │ 
-   │ Note: Expected one of: '=', '('
+   │ Note: Expected one of: '(', '='
 ───╯

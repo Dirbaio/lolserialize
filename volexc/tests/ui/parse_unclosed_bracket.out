@@ -1,5 +1,5 @@
-Error: found "}" but expected "]"
-   ╭─[parse_unclosed_bracket.vol:4:1]
+Error: found '}' expected ']'
+   ╭─[ parse_unclosed_bracket.vol:4:1 ]
    │
  4 │ }
    │ ┬  

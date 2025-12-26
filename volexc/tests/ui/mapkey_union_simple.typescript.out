@@ -1,5 +1,5 @@
 Error: invalid map key type: unions cannot be used as map keys in TypeScript
-    ╭─[mapkey_union_simple.vol:11:12]
+    ╭─[ mapkey_union_simple.vol:11:12 ]
     │
  11 │     data: {Value:string}
     │            ──┬──  

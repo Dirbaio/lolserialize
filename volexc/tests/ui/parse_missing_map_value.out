@@ -1,9 +1,9 @@
-Error: found "}" but expected one of "{", "i32", "i8", "u8", "u32", "f64", "f32", "u16", "string", "i64", "bool", "u64", "[", "i16"
-   ╭─[parse_missing_map_value.vol:3:18]
+Error: found '}' expected 'bool', 'u8', 'u16', 'u32', 'u64', 'i8', 'i16', 'i32', 'i64', 'f32', 'f64', 'string', '[', '{', or type name
+   ╭─[ parse_missing_map_value.vol:3:18 ]
    │
  3 │     bar: {string:}
    │                  ┬  
    │                  ╰── Unexpected '}'
    │ 
-   │ Note: Expected one of: '{', 'i32', 'i8', 'u8', 'u32', 'f64', 'f32', 'u16', 'string', 'i64', 'bool', 'u64', '[', 'i16'
+   │ Note: Expected one of: 'bool', 'u8', 'u16', 'u32', 'u64', 'i8', 'i16', 'i32', 'i64', 'f32', 'f64', 'string', '[', '{', type name
 ───╯

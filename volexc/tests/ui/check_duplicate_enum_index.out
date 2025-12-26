@@ -1,5 +1,5 @@
 Error: duplicate index 1 in enum `Foo`
-   ╭─[check_duplicate_enum_index.vol:3:11]
+   ╭─[ check_duplicate_enum_index.vol:3:11 ]
    │
  3 │     Bar = 1
    │           ┬  

@@ -1,9 +1,9 @@
-Error: found "function" but expected one of "enum", "message", end of input, "struct", "union"
-   ╭─[parse_invalid_item_keyword.vol:2:1]
+Error: found 'function' expected 'struct', 'message', 'enum', 'union', or end of input
+   ╭─[ parse_invalid_item_keyword.vol:2:1 ]
    │
  2 │ function Foo {
    │ ────┬───  
    │     ╰───── Unexpected 'function'
    │ 
-   │ Note: Expected one of: 'enum', 'message', 'struct', 'union'
+   │ Note: Expected one of: 'struct', 'message', 'enum', 'union', end of input
 ───╯

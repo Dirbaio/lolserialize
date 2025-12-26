@@ -1,7 +1,9 @@
-Error: found "}"
-   ╭─[parse_missing_field_index.vol:4:1]
+Error: found '}' expected integer
+   ╭─[ parse_missing_field_index.vol:4:1 ]
    │
  4 │ }
    │ ┬  
    │ ╰── Unexpected '}'
+   │ 
+   │ Note: Expected one of: integer
 ───╯

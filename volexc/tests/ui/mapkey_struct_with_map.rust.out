@@ -1,5 +1,5 @@
 Error: invalid map key type: maps cannot be used as map keys
-    ╭─[mapkey_struct_with_map.vol:7:15]
+    ╭─[ mapkey_struct_with_map.vol:7:15 ]
     │
   7 │     metadata: {string:string}
     │               ───────┬───────  

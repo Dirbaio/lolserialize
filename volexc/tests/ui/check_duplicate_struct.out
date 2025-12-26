@@ -1,5 +1,5 @@
 Error: duplicate definition of `Foo`
-   ╭─[check_duplicate_struct.vol:2:8]
+   ╭─[ check_duplicate_struct.vol:2:8 ]
    │
  2 │ struct Foo {
    │        ─┬─  

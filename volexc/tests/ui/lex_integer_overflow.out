@@ -1,7 +1,7 @@
-Error: found end of input
-   ╭─[lex_integer_overflow.vol:3:9]
+Error: integer literal '4294967296' is too large (must fit in u32)
+   ╭─[ lex_integer_overflow.vol:3:9 ]
    │
  3 │     A = 4294967296
-   │         ─────┬────  
-   │              ╰────── integer literal '4294967296' is too large (must fit in u32)
+   │         ┬  
+   │         ╰── Unexpected end of input
 ───╯

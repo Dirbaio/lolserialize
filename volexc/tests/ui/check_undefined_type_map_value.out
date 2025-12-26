@@ -1,5 +1,5 @@
 Error: undefined type `UndefinedType`
-   ╭─[check_undefined_type_map_value.vol:3:15]
+   ╭─[ check_undefined_type_map_value.vol:3:15 ]
    │
  3 │     bar: {u32:UndefinedType}
    │               ──────┬──────  

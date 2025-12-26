@@ -1,5 +1,5 @@
 Error: duplicate index 1 in message `Foo`
-   ╭─[check_duplicate_message_index.vol:3:16]
+   ╭─[ check_duplicate_message_index.vol:3:16 ]
    │
  3 │     bar: u32 = 1
    │                ┬  

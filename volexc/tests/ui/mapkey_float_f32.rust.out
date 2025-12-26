@@ -1,5 +1,5 @@
 Error: invalid map key type: floats cannot be used as map keys
-   ╭─[mapkey_float_f32.vol:6:12]
+   ╭─[ mapkey_float_f32.vol:6:12 ]
    │
  6 │     data: {f32:string}
    │            ─┬─  

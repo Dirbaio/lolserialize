@@ -1,5 +1,5 @@
 Error: index 0 is reserved in message `Foo`
-   ╭─[check_message_index_zero.vol:3:16]
+   ╭─[ check_message_index_zero.vol:3:16 ]
    │
  3 │     bar: u32 = 0
    │                ┬  

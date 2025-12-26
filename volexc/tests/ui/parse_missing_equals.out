@@ -1,5 +1,5 @@
-Error: found "1" but expected "="
-   ╭─[parse_missing_equals.vol:3:7]
+Error: found '1' expected '='
+   ╭─[ parse_missing_equals.vol:3:7 ]
    │
  3 │     A 1
    │       ┬  

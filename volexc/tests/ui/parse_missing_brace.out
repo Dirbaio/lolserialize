@@ -1,7 +1,9 @@
-Error: found end of input but expected "}"
-   ╭─[parse_missing_brace.vol:3:14]
+Error: found end of input expected identifier, or '}'
+   ╭─[ parse_missing_brace.vol:3:14 ]
    │
+ 3 │     bar: u32
+   │              │ 
+   │              ╰─ Unexpected end of input
    │ 
-   │ 
-   │ Note: Expected one of: '}'
+   │ Note: Expected one of: identifier, '}'
 ───╯

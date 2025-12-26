@@ -1,5 +1,5 @@
 Error: duplicate field `bar` in struct `Foo`
-   ╭─[check_duplicate_struct_field.vol:3:5]
+   ╭─[ check_duplicate_struct_field.vol:3:5 ]
    │
  3 │     bar: u32
    │     ─┬─  

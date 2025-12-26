@@ -1,5 +1,5 @@
 Error: invalid map key type: arrays cannot be used as map keys in Go
-   ╭─[mapkey_array_of_float.vol:6:12]
+   ╭─[ mapkey_array_of_float.vol:6:12 ]
    │
  6 │     data: {[f32]:string}
    │            ──┬──  

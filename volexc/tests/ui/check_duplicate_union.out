@@ -1,5 +1,5 @@
 Error: duplicate definition of `Result`
-   ╭─[check_duplicate_union.vol:2:7]
+   ╭─[ check_duplicate_union.vol:2:7 ]
    │
  2 │ union Result {
    │       ───┬──  

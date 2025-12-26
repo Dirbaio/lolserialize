@@ -1,5 +1,5 @@
 Error: undefined type `UndefinedType`
-   ╭─[check_undefined_type_union.vol:3:9]
+   ╭─[ check_undefined_type_union.vol:3:9 ]
    │
  3 │     Bar(UndefinedType) = 1
    │         ──────┬──────  

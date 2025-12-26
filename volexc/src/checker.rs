@@ -476,11 +476,15 @@ pub fn check(schema: &Schema, language: Language) -> Vec<CheckError> {
 
 pub fn print_errors(filename: &str, src: &str, errors: Vec<CheckError>) {
     for err in errors {
-        let start = err.labels.first().map(|(s, _, _)| s.start).unwrap_or(0);
-        let mut report = Report::build(ReportKind::Error, filename, start).with_message(&err.message);
+        let first_span = err.labels.first().map(|(s, _, _)| s.start..s.end).unwrap_or(0..0);
+        let mut report = Report::build(ReportKind::Error, (filename, first_span)).with_message(&err.message);
 
         for (span, message, color) in err.labels {
-            report = report.with_label(Label::new((filename, span)).with_message(message).with_color(color));
+            report = report.with_label(
+                Label::new((filename, span.start..span.end))
+                    .with_message(message)
+                    .with_color(color),
+            );
         }
 
         report.finish().print((filename, Source::from(src))).unwrap();

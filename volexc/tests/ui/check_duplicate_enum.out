@@ -1,5 +1,5 @@
 Error: duplicate definition of `Status`
-   ╭─[check_duplicate_enum.vol:2:6]
+   ╭─[ check_duplicate_enum.vol:2:6 ]
    │
  2 │ enum Status {
    │      ───┬──  

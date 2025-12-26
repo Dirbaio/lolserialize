@@ -1,5 +1,5 @@
 Error: duplicate definition of `Bar`
-   ╭─[check_duplicate_message.vol:2:9]
+   ╭─[ check_duplicate_message.vol:2:9 ]
    │
  2 │ message Bar {
    │         ─┬─  

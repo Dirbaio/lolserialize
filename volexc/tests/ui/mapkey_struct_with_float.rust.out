@@ -1,5 +1,5 @@
 Error: invalid map key type: floats cannot be used as map keys
-    ╭─[mapkey_struct_with_float.vol:7:12]
+    ╭─[ mapkey_struct_with_float.vol:7:12 ]
     │
   7 │     value: f64
     │            ─┬─  

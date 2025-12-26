@@ -1,5 +1,5 @@
 Error: duplicate field `bar` in message `Foo`
-   ╭─[check_duplicate_message_field.vol:3:5]
+   ╭─[ check_duplicate_message_field.vol:3:5 ]
    │
  3 │     bar: u32 = 1
    │     ─┬─  

@@ -1,6 +1,8 @@
-use std::ops::{Deref, DerefMut, Range};
+use std::ops::{Deref, DerefMut};
 
-pub type Span = Range<usize>;
+pub use chumsky::span::SimpleSpan;
+
+pub type Span = SimpleSpan;
 
 #[derive(Debug, Clone)]
 pub struct Spanned<T> {

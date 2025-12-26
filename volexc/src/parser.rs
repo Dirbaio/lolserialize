@@ -1,18 +1,43 @@
+use chumsky::extra::ParserExtra;
+use chumsky::input::{MapExtra, ValueInput};
 use chumsky::prelude::*;
 
-use crate::schema::*;
+use crate::schema::{Spanned, *};
 
-fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
+fn spanned<'src, T, I, E>(t: T, e: &mut MapExtra<'src, '_, I, E>) -> Spanned<T>
+where
+    I: Input<'src, Span = Span>,
+    E: ParserExtra<'src, I>,
+{
+    Spanned::new(t, e.span())
+}
+
+/*
+pub fn map_with<U, F>(self, f: F) -> MapWith<Self, O, F>
+where
+    F: Fn(O, &mut MapExtra<'src, '_, I, E>) -> U,
+    Self: Sized,
+    // Bounds from trait:
+    I: Input<'src>,
+    E: ParserExtra<'src, I>,
+ */
+
+fn lexer<'src>() -> impl Parser<'src, &'src str, Vec<(Token, Span)>, extra::Err<Rich<'src, char, Span>>> {
     // Integer must not be followed by an alphanumeric character
     let int = text::int(10)
-        .then_ignore(filter(|c: &char| c.is_ascii_alphanumeric() || *c == '_').not().rewind())
-        .try_map(|s: String, span| {
+        .then_ignore(
+            any()
+                .filter(|c: &char| c.is_ascii_alphanumeric() || *c == '_')
+                .not()
+                .rewind(),
+        )
+        .try_map(|s: &str, span| {
             s.parse::<u32>()
                 .map(Token::Int)
-                .map_err(|_| Simple::custom(span, format!("integer literal '{}' is too large (must fit in u32)", s)))
+                .map_err(|_| Rich::custom(span, format!("integer literal '{}' is too large (must fit in u32)", s)))
         });
 
-    let ident = text::ident().map(|s: String| match s.as_str() {
+    let ident = text::ascii::ident().map(|s: &str| match s {
         "struct" => Token::Struct,
         "message" => Token::Message,
         "enum" => Token::Enum,
@@ -29,7 +54,7 @@ fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
         "f32" => Token::F32,
         "f64" => Token::F64,
         "string" => Token::String,
-        _ => Token::Ident(s),
+        _ => Token::Ident(s.to_string()),
     });
 
     let symbol = choice((
@@ -44,19 +69,27 @@ fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
         just('?').to(Token::Question),
     ));
 
-    let line_comment = just("//").then(take_until(just('\n'))).padded().ignored();
+    let line_comment = just("//")
+        .then(any().and_is(just('\n').not()).repeated())
+        .padded()
+        .ignored();
 
-    let multiline_comment = just("/*").then(take_until(just("*/").ignored())).padded().ignored();
+    let multiline_comment = just("/*")
+        .then(any().and_is(just("*/").not()).repeated())
+        .then(just("*/"))
+        .padded()
+        .ignored();
 
     let comment = line_comment.or(multiline_comment);
 
     let token = int.or(ident).or(symbol);
 
     token
-        .map_with_span(|tok, span| (tok, span))
+        .map_with(|tok, e| (tok, e.span()))
         .padded_by(comment.repeated())
         .padded()
         .repeated()
+        .collect()
         .then_ignore(end())
 }
 
@@ -132,9 +165,12 @@ impl std::fmt::Display for Token {
     }
 }
 
-fn parser() -> impl Parser<Token, Schema, Error = Simple<Token>> + Clone {
+fn parser<'tokens, 'src: 'tokens, I>() -> impl Parser<'tokens, I, Schema, extra::Err<Rich<'tokens, Token, Span>>> + Clone
+where
+    I: ValueInput<'tokens, Token = Token, Span = Span>,
+{
     let ident = select! {
-        Token::Ident(s) => s,
+        Token::Ident(s) => s.clone(),
     }
     .labelled("identifier");
 
@@ -159,30 +195,31 @@ fn parser() -> impl Parser<Token, Schema, Error = Simple<Token>> + Clone {
             just(Token::String).to(Type::String),
         ));
 
-        let named = ident.map(Type::Named).labelled("type name");
+        let named = ident.clone().map(Type::Named).labelled("type name");
 
         let array = ty
             .clone()
-            .map_with_span(Spanned::new)
+            .map_with(spanned)
             .delimited_by(just(Token::LBracket), just(Token::RBracket))
             .map(|inner| Type::Array(Box::new(inner)));
 
         let map = ty
             .clone()
-            .map_with_span(Spanned::new)
+            .map_with(spanned)
             .then_ignore(just(Token::Colon))
-            .then(ty.clone().map_with_span(Spanned::new))
+            .then(ty.clone().map_with(spanned))
             .delimited_by(just(Token::LBrace), just(Token::RBrace))
             .map(|(k, v)| Type::Map(Box::new(k), Box::new(v)));
 
         choice((primitive, array, map, named))
     });
 
-    let spanned_ty = ty.map_with_span(Spanned::new);
+    let spanned_ty = ty.map_with(spanned);
 
     // Struct field: name: Type  or  name?: Type
     let struct_field = ident
-        .map_with_span(Spanned::new)
+        .clone()
+        .map_with(spanned)
         .then(just(Token::Question).or_not())
         .then_ignore(just(Token::Colon))
         .then(spanned_ty.clone())
@@ -191,35 +228,38 @@ fn parser() -> impl Parser<Token, Schema, Error = Simple<Token>> + Clone {
             ty,
             optional: opt.is_some(),
         })
-        .map_with_span(Spanned::new);
+        .map_with(spanned);
 
     // Message field: name: Type = index  or  name?: Type = index
     let message_field = ident
-        .map_with_span(Spanned::new)
+        .clone()
+        .map_with(spanned)
         .then(just(Token::Question).or_not())
         .then_ignore(just(Token::Colon))
         .then(spanned_ty.clone())
         .then_ignore(just(Token::Eq))
-        .then(int.map_with_span(Spanned::new))
+        .then(int.clone().map_with(spanned))
         .map(|(((name, opt), ty), index)| MessageField {
             name,
             ty,
             index,
             optional: opt.is_some(),
         })
-        .map_with_span(Spanned::new);
+        .map_with(spanned);
 
     // Enum variant: Name = index
     let enum_variant = ident
-        .map_with_span(Spanned::new)
+        .clone()
+        .map_with(spanned)
         .then_ignore(just(Token::Eq))
-        .then(int.map_with_span(Spanned::new))
+        .then(int.clone().map_with(spanned))
         .map(|(name, index)| EnumVariant { name, index })
-        .map_with_span(Spanned::new);
+        .map_with(spanned);
 
     // Union variant: Name = index  or  Name(Type) = index
     let union_variant = ident
-        .map_with_span(Spanned::new)
+        .clone()
+        .map_with(spanned)
         .then(
             spanned_ty
                 .clone()
@@ -227,116 +267,149 @@ fn parser() -> impl Parser<Token, Schema, Error = Simple<Token>> + Clone {
                 .or_not(),
         )
         .then_ignore(just(Token::Eq))
-        .then(int.map_with_span(Spanned::new))
+        .then(int.clone().map_with(spanned))
         .map(|((name, ty), index)| UnionVariant { name, ty, index })
-        .map_with_span(Spanned::new);
+        .map_with(spanned);
 
     // struct Name { fields }
     let struct_def = just(Token::Struct)
-        .ignore_then(ident.map_with_span(Spanned::new))
+        .ignore_then(ident.clone().map_with(spanned))
         .then(
             struct_field
                 .repeated()
+                .collect()
                 .delimited_by(just(Token::LBrace), just(Token::RBrace)),
         )
         .map(|(name, fields)| Item::Struct(Struct { name, fields }))
-        .map_with_span(Spanned::new);
+        .map_with(spanned);
 
     // message Name { fields }
     let message_def = just(Token::Message)
-        .ignore_then(ident.map_with_span(Spanned::new))
+        .ignore_then(ident.clone().map_with(spanned))
         .then(
             message_field
                 .repeated()
+                .collect()
                 .delimited_by(just(Token::LBrace), just(Token::RBrace)),
         )
         .map(|(name, fields)| Item::Message(Message { name, fields }))
-        .map_with_span(Spanned::new);
+        .map_with(spanned);
 
     // enum Name { variants }
     let enum_def = just(Token::Enum)
-        .ignore_then(ident.map_with_span(Spanned::new))
+        .ignore_then(ident.clone().map_with(spanned))
         .then(
             enum_variant
                 .repeated()
+                .collect()
                 .delimited_by(just(Token::LBrace), just(Token::RBrace)),
         )
         .map(|(name, variants)| Item::Enum(Enum { name, variants }))
-        .map_with_span(Spanned::new);
+        .map_with(spanned);
 
     // union Name { variants }
     let union_def = just(Token::Union)
-        .ignore_then(ident.map_with_span(Spanned::new))
+        .ignore_then(ident.clone().map_with(spanned))
         .then(
             union_variant
                 .repeated()
+                .collect()
                 .delimited_by(just(Token::LBrace), just(Token::RBrace)),
         )
         .map(|(name, variants)| Item::Union(Union { name, variants }))
-        .map_with_span(Spanned::new);
+        .map_with(spanned);
 
     let item = choice((struct_def, message_def, enum_def, union_def));
 
-    item.repeated().then_ignore(end()).map(|items| Schema { items })
+    item.repeated()
+        .collect()
+        .then_ignore(end())
+        .map(|items| Schema { items })
 }
 
-pub fn parse(src: &str) -> Result<Schema, Vec<Simple<std::string::String>>> {
-    let (tokens, lex_errs) = lexer().parse_recovery(src);
+pub struct ParseError {
+    pub span: Span,
+    pub message: String,
+    pub found: Option<String>,
+    pub expected: Vec<String>,
+}
+
+pub fn parse(src: &str) -> Result<Schema, Vec<ParseError>> {
+    let (tokens, lex_errs) = lexer().parse(src).into_output_errors();
 
     if !lex_errs.is_empty() {
-        return Err(lex_errs.into_iter().map(|e| e.map(|c| c.to_string())).collect());
+        return Err(lex_errs
+            .into_iter()
+            .map(|e| ParseError {
+                span: *e.span(),
+                message: e.to_string(),
+                found: e.found().map(|c| c.to_string()),
+                expected: e
+                    .expected()
+                    .filter_map(|p| match p {
+                        chumsky::error::RichPattern::Token(t) => Some(format!("'{}'", &**t)),
+                        chumsky::error::RichPattern::Label(l) => Some(l.to_string()),
+                        chumsky::error::RichPattern::EndOfInput => Some("end of input".to_string()),
+                        _ => None,
+                    })
+                    .collect(),
+            })
+            .collect());
     }
 
     let tokens = tokens.unwrap();
     let len = src.len();
 
-    let (schema, parse_errs) = parser().parse_recovery(chumsky::Stream::from_iter(len..len + 1, tokens.into_iter()));
+    let (schema, parse_errs) = parser()
+        .parse(tokens.as_slice().map((len..len).into(), |(t, s)| (t, s)))
+        .into_output_errors();
 
     if !parse_errs.is_empty() {
-        return Err(parse_errs.into_iter().map(|e| e.map(|t| t.to_string())).collect());
+        return Err(parse_errs
+            .into_iter()
+            .map(|e| ParseError {
+                span: *e.span(),
+                message: e.to_string(),
+                found: e.found().map(|t| t.to_string()),
+                expected: e
+                    .expected()
+                    .filter_map(|p| match p {
+                        chumsky::error::RichPattern::Token(t) => Some(format!("'{}'", &**t)),
+                        chumsky::error::RichPattern::Label(l) => Some(l.to_string()),
+                        chumsky::error::RichPattern::EndOfInput => Some("end of input".to_string()),
+                        _ => None,
+                    })
+                    .collect(),
+            })
+            .collect());
     }
 
     Ok(schema.unwrap())
 }
 
-pub fn print_errors(filename: &str, src: &str, errs: Vec<Simple<std::string::String>>) {
+pub fn print_errors(filename: &str, src: &str, errs: Vec<ParseError>) {
     use ariadne::{Color, Label, Report, ReportKind, Source};
 
     for err in errs {
-        let report = Report::build(ReportKind::Error, filename, err.span().start)
-            .with_message(err.to_string())
-            .with_label(
-                Label::new((filename, err.span()))
-                    .with_message(match err.reason() {
-                        chumsky::error::SimpleReason::Unexpected => {
-                            format!(
-                                "Unexpected {}",
-                                err.found()
-                                    .map(|t| format!("'{}'", t))
-                                    .unwrap_or_else(|| "end of input".to_string())
-                            )
-                        }
-                        chumsky::error::SimpleReason::Unclosed { span: _, delimiter } => {
-                            format!("Unclosed delimiter '{}'", delimiter)
-                        }
-                        chumsky::error::SimpleReason::Custom(msg) => msg.clone(),
-                    })
-                    .with_color(Color::Red),
-            );
+        let err_span = err.span.start..err.span.end;
+        let mut report = Report::build(ReportKind::Error, (filename, err_span.clone())).with_message(&err.message);
 
-        let report = if !err.expected().len() != 0 {
-            let expected: Vec<_> = err
-                .expected()
-                .filter_map(|e| e.as_ref().map(|e| format!("'{}'", e)))
-                .collect();
-            if !expected.is_empty() {
-                report.with_note(format!("Expected one of: {}", expected.join(", ")))
-            } else {
-                report
-            }
-        } else {
-            report
-        };
+        // Add a label for the error span
+        report = report.with_label(
+            Label::new((filename, err_span))
+                .with_message(
+                    err.found
+                        .as_ref()
+                        .map(|t| format!("Unexpected '{}'", t))
+                        .unwrap_or_else(|| "Unexpected end of input".to_string()),
+                )
+                .with_color(Color::Red),
+        );
+
+        // Add expected tokens as a note
+        if !err.expected.is_empty() {
+            report = report.with_note(format!("Expected one of: {}", err.expected.join(", ")));
+        }
 
         report.finish().print((filename, Source::from(src))).unwrap();
     }

@@ -1,5 +1,5 @@
 Error: duplicate variant `Bar` in union `Foo`
-   ╭─[check_duplicate_union_variant.vol:3:5]
+   ╭─[ check_duplicate_union_variant.vol:3:5 ]
    │
  3 │     Bar(u32) = 1
    │     ─┬─  

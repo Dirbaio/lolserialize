@@ -1,5 +1,5 @@
 Error: duplicate variant `Bar` in enum `Foo`
-   ╭─[check_duplicate_enum_variant.vol:3:5]
+   ╭─[ check_duplicate_enum_variant.vol:3:5 ]
    │
  3 │     Bar = 1
    │     ─┬─  
