@@ -268,3 +268,107 @@ union Nested {
     Outer(string) = 2
 }
 ```
+
+## Service
+
+Services define RPC interfaces with named methods. Each method has a request type, a response type, and an index for wire compatibility.
+
+**Syntax:**
+
+```vol
+service ServiceName {
+    fn method_name(RequestType) -> ResponseType = index
+}
+```
+
+Method indices must be 1 or greater. 0 is not allowed. Indices can be non-sequential.
+
+### Basic Methods
+
+The simplest form of RPC method takes a request and returns a response:
+
+```vol
+service UserService {
+    fn get_user(GetUserRequest) -> GetUserResponse = 1
+    fn create_user(CreateUserRequest) -> CreateUserResponse = 2
+    fn delete_user(DeleteUserRequest) -> DeleteUserResponse = 3
+}
+
+message GetUserRequest {
+    id: u64 = 1
+}
+
+message GetUserResponse {
+    user?: User = 1
+}
+```
+
+### Streaming Methods
+
+Methods can return a stream of responses using the `stream` keyword. The client sends one request, and the server sends multiple responses over time.
+
+```vol
+service EventService {
+    fn subscribe(SubscribeRequest) -> stream Event = 1
+}
+```
+
+### Complete Example
+
+```vol
+// Request/Response types
+message LoginRequest {
+    username: string = 1
+    password: string = 2
+}
+
+message LoginResponse {
+    token?: string = 1
+    error?: string = 2
+}
+
+message LogoutRequest {
+    token: string = 1
+}
+
+message LogoutResponse {}
+
+message ChatMessage {
+    sender: string = 1
+    content: string = 2
+    timestamp: u64 = 3
+}
+
+message SubscribeRequest {
+    channel: string = 1
+}
+
+// Service definition
+service MessagingService {
+    // Simple request-response
+    fn login(LoginRequest) -> LoginResponse = 1
+    fn logout(LogoutRequest) -> LogoutResponse = 2
+
+    // Server streaming
+    fn subscribe(SubscribeRequest) -> stream ChatMessage = 3
+}
+```
+
+### Error Handling
+
+Error handling is not built into the service definition syntax. Instead, use union types as your response to represent success or failure:
+
+```vol
+union GetUserResponse {
+    Ok(User) = 1
+    NotFound = 2
+    PermissionDenied(string) = 3
+    InternalError(string) = 4
+}
+
+service UserService {
+    fn get_user(GetUserRequest) -> GetUserResponse = 1
+}
+```
+
+This approach gives you full control over error representation and keeps the schema explicit about what errors each method can return.

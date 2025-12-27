@@ -1,0 +1,7 @@
+// Undefined stream response type in service
+
+message Request {}
+
+service Foo {
+    fn bar(Request) -> stream UndefinedEvent = 1
+}

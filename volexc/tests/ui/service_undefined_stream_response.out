@@ -1,0 +1,7 @@
+Error: undefined type `UndefinedEvent`
+   ╭─[ service_undefined_stream_response.vol:6:24 ]
+   │
+ 6 │     fn bar(Request) -> stream UndefinedEvent = 1
+   │                        ──────────┬──────────  
+   │                                  ╰──────────── not found
+───╯

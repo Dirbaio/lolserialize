@@ -1,0 +1,9 @@
+// Duplicate method name in service
+
+message Request {}
+message Response {}
+
+service Foo {
+    fn bar(Request) -> Response = 1
+    fn bar(Request) -> Response = 2
+}

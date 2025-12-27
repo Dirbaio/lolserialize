@@ -1,0 +1,11 @@
+Error: duplicate definition of `Foo`
+    ╭─[ service_duplicate_service.vol:6:9 ]
+    │
+  6 │ service Foo {
+    │         ─┬─  
+    │          ╰─── first defined here
+    │ 
+ 10 │ service Foo {
+    │         ─┬─  
+    │          ╰─── redefined here
+────╯

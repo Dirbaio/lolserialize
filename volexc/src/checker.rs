@@ -55,6 +55,7 @@ impl<'a> Checker<'a> {
                 Item::Message(m) => self.check_message(m),
                 Item::Enum(e) => self.check_enum(e),
                 Item::Union(u) => self.check_union(u),
+                Item::Service(s) => self.check_service(s),
             }
         }
 
@@ -243,16 +244,83 @@ impl<'a> Checker<'a> {
         }
     }
 
+    fn check_service(&mut self, s: &Service) {
+        // Check for duplicate method names
+        let mut method_names: HashMap<&str, &Spanned<ServiceMethod>> = HashMap::new();
+        for method in &s.methods {
+            if let Some(prev) = method_names.get(method.name.as_str()) {
+                self.errors.push(
+                    CheckError::new(format!(
+                        "duplicate method `{}` in service `{}`",
+                        method.name.node, s.name.node
+                    ))
+                    .label(prev.name.span.clone(), "first defined here", Color::Blue)
+                    .label(method.name.span.clone(), "redefined here", Color::Red),
+                );
+            } else {
+                method_names.insert(&method.name.node, method);
+            }
+        }
+
+        // Check for duplicate method indices and zero index
+        let mut method_indices: HashMap<u32, &Spanned<ServiceMethod>> = HashMap::new();
+        for method in &s.methods {
+            // Check for zero index
+            if method.index.node == 0 {
+                self.errors.push(
+                    CheckError::new(format!("index 0 is reserved in service `{}`", s.name.node)).label(
+                        method.index.span.clone(),
+                        "indices must be >= 1",
+                        Color::Red,
+                    ),
+                );
+            }
+
+            if let Some(prev) = method_indices.get(&method.index.node) {
+                self.errors.push(
+                    CheckError::new(format!(
+                        "duplicate index {} in service `{}`",
+                        method.index.node, s.name.node
+                    ))
+                    .label(prev.index.span.clone(), "first used here", Color::Blue)
+                    .label(method.index.span.clone(), "reused here", Color::Red),
+                );
+            } else {
+                method_indices.insert(method.index.node, method);
+            }
+
+            // Check request type reference
+            self.check_type(&method.request);
+
+            // Check response type reference
+            match &method.response.node {
+                ServiceResponse::Unary(ty) | ServiceResponse::Stream(ty) => {
+                    self.check_type(&Spanned::new(ty.clone(), method.response.span.clone()));
+                }
+            }
+        }
+    }
+
     fn check_type(&mut self, ty: &Spanned<Type>) {
         match &ty.node {
             Type::Named(name) => {
-                if self.schema.item(name.as_str()).is_none() {
-                    self.errors
-                        .push(CheckError::new(format!("undefined type `{}`", name)).label(
-                            ty.span.clone(),
-                            "not found",
-                            Color::Red,
-                        ));
+                match self.schema.item(name.as_str()) {
+                    None => {
+                        self.errors
+                            .push(CheckError::new(format!("undefined type `{}`", name)).label(
+                                ty.span.clone(),
+                                "not found",
+                                Color::Red,
+                            ));
+                    }
+                    Some(item) => {
+                        if matches!(item.node, Item::Service(_)) {
+                            self.errors.push(
+                                CheckError::new(format!("services cannot be used as types"))
+                                    .label(ty.span.clone(), "service used as type", Color::Red),
+                            );
+                        }
+                    }
                 }
             }
             Type::Array(inner) => self.check_type(inner),
@@ -371,6 +439,12 @@ impl<'a> Checker<'a> {
 
                     // Unions: valid in Rust, invalid in Go/TypeScript
                     Item::Union(u) => self.validate_union_as_map_key(u, name, span, error_chain),
+
+                    // Services cannot be used as types
+                    Item::Service(_) => {
+                        error_chain.push((span, "service used as type".to_string(), Color::Red));
+                        Some("services cannot be used as types".to_string())
+                    }
                 }
             }
         }
@@ -467,6 +541,7 @@ fn item_name_span(item: &Spanned<Item>) -> Span {
         Item::Message(m) => m.name.span.clone(),
         Item::Enum(e) => e.name.span.clone(),
         Item::Union(u) => u.name.span.clone(),
+        Item::Service(s) => s.name.span.clone(),
     }
 }
 

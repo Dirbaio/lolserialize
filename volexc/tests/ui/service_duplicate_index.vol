@@ -1,0 +1,9 @@
+// Duplicate method index in service
+
+message Request {}
+message Response {}
+
+service Foo {
+    fn bar(Request) -> Response = 1
+    fn baz(Request) -> Response = 1
+}

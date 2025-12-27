@@ -42,6 +42,9 @@ fn lexer<'src>() -> impl Parser<'src, &'src str, Vec<(Token, Span)>, extra::Err<
         "message" => Token::Message,
         "enum" => Token::Enum,
         "union" => Token::Union,
+        "service" => Token::Service,
+        "fn" => Token::Fn,
+        "stream" => Token::Stream,
         "bool" => Token::Bool,
         "u8" => Token::U8,
         "u16" => Token::U16,
@@ -65,6 +68,7 @@ fn lexer<'src>() -> impl Parser<'src, &'src str, Vec<(Token, Span)>, extra::Err<
         just('(').to(Token::LParen),
         just(')').to(Token::RParen),
         just(':').to(Token::Colon),
+        just("->").to(Token::Arrow),
         just('=').to(Token::Eq),
         just('?').to(Token::Question),
     ));
@@ -100,6 +104,9 @@ enum Token {
     Message,
     Enum,
     Union,
+    Service,
+    Fn,
+    Stream,
 
     // Primitive types
     Bool,
@@ -127,6 +134,7 @@ enum Token {
     LParen,
     RParen,
     Colon,
+    Arrow,
     Eq,
     Question,
 }
@@ -138,6 +146,9 @@ impl std::fmt::Display for Token {
             Token::Message => write!(f, "message"),
             Token::Enum => write!(f, "enum"),
             Token::Union => write!(f, "union"),
+            Token::Service => write!(f, "service"),
+            Token::Fn => write!(f, "fn"),
+            Token::Stream => write!(f, "stream"),
             Token::Bool => write!(f, "bool"),
             Token::U8 => write!(f, "u8"),
             Token::U16 => write!(f, "u16"),
@@ -159,6 +170,7 @@ impl std::fmt::Display for Token {
             Token::LParen => write!(f, "("),
             Token::RParen => write!(f, ")"),
             Token::Colon => write!(f, ":"),
+            Token::Arrow => write!(f, "->"),
             Token::Eq => write!(f, "="),
             Token::Question => write!(f, "?"),
         }
@@ -319,7 +331,46 @@ where
         .map(|(name, variants)| Item::Union(Union { name, variants }))
         .map_with(spanned);
 
-    let item = choice((struct_def, message_def, enum_def, union_def));
+    // Service response: -> Type or -> stream Type
+    let service_response = just(Token::Arrow).ignore_then(choice((
+        // -> stream Type
+        just(Token::Stream)
+            .ignore_then(spanned_ty.clone())
+            .map_with(|ty, e| Spanned::new(ServiceResponse::Stream(ty.node), e.span())),
+        // -> Type
+        spanned_ty
+            .clone()
+            .map_with(|ty, e| Spanned::new(ServiceResponse::Unary(ty.node), e.span())),
+    )));
+
+    // Service method: fn name(Type) -> Type = index
+    let service_method = just(Token::Fn)
+        .ignore_then(ident.clone().map_with(spanned))
+        .then(spanned_ty.clone().delimited_by(just(Token::LParen), just(Token::RParen)))
+        .then(service_response)
+        .then_ignore(just(Token::Eq))
+        .then(int.clone().map_with(spanned))
+        .map(|(((name, request), response), index)| ServiceMethod {
+            name,
+            request,
+            response,
+            index,
+        })
+        .map_with(spanned);
+
+    // service Name { methods }
+    let service_def = just(Token::Service)
+        .ignore_then(ident.clone().map_with(spanned))
+        .then(
+            service_method
+                .repeated()
+                .collect()
+                .delimited_by(just(Token::LBrace), just(Token::RBrace)),
+        )
+        .map(|(name, methods)| Item::Service(Service { name, methods }))
+        .map_with(spanned);
+
+    let item = choice((struct_def, message_def, enum_def, union_def, service_def));
 
     item.repeated()
         .collect()

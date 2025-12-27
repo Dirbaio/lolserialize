@@ -1,9 +1,9 @@
-Error: found '@' expected '/', int, identifier, '{', '}', '[', ']', '(', ')', ':', '=', '?', or end of input
+Error: found '@' expected '/', int, identifier, '{', '}', '[', ']', '(', ')', ':', '-', '=', '?', or end of input
    ╭─[ lex_invalid_token.vol:3:5 ]
    │
  3 │     @field: u32
    │     ┬  
    │     ╰── Unexpected '@'
    │ 
-   │ Note: Expected one of: '/', int, identifier, '{', '}', '[', ']', '(', ')', ':', '=', '?', end of input
+   │ Note: Expected one of: '/', int, identifier, '{', '}', '[', ']', '(', ')', ':', '-', '=', '?', end of input
 ───╯

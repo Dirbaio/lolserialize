@@ -66,6 +66,7 @@ impl Schema {
                 Item::Message(_) => None,
                 Item::Enum(_) => None,
                 Item::Union(_) => None,
+                Item::Service(_) => panic!("services cannot be used as types"),
             },
         }
     }
@@ -96,6 +97,7 @@ impl Schema {
                 Item::Message(_) => WireType::Message,
                 Item::Enum(_) => WireType::Varint,
                 Item::Union(_) => WireType::Union,
+                Item::Service(_) => panic!("services cannot be used as types"),
             },
         }
     }
@@ -109,6 +111,7 @@ pub enum Item {
     Message(Message),
     Enum(Enum),
     Union(Union),
+    Service(Service),
 }
 
 impl Item {
@@ -118,6 +121,7 @@ impl Item {
             Item::Message(m) => &m.name.node,
             Item::Enum(e) => &e.name.node,
             Item::Union(u) => &u.name.node,
+            Item::Service(s) => &s.name.node,
         }
     }
 }
@@ -191,4 +195,26 @@ pub struct UnionVariant {
 pub struct Union {
     pub name: Spanned<String>,
     pub variants: Vec<Spanned<UnionVariant>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ServiceMethod {
+    pub name: Spanned<String>,
+    pub request: Spanned<Type>,
+    pub response: Spanned<ServiceResponse>,
+    pub index: Spanned<u32>,
+}
+
+#[derive(Debug, Clone)]
+pub enum ServiceResponse {
+    /// A single response: `-> Type`
+    Unary(Type),
+    /// A stream of responses: `-> stream Type`
+    Stream(Type),
+}
+
+#[derive(Debug, Clone)]
+pub struct Service {
+    pub name: Spanned<String>,
+    pub methods: Vec<Spanned<ServiceMethod>>,
 }

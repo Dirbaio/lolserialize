@@ -33,6 +33,7 @@ impl<'a> TypeScriptCodeGenerator<'a> {
                 Item::Message(m) => self.gen_message(m),
                 Item::Enum(e) => self.gen_enum(e),
                 Item::Union(u) => self.gen_union(u),
+                Item::Service(_) => {} // TODO: codegen for services
             }
             self.output.push('\n');
         }

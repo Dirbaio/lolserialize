@@ -1,0 +1,9 @@
+Error: found '}' expected '='
+   ╭─[ parse_service_missing_index.vol:8:1 ]
+   │
+ 8 │ }
+   │ ┬  
+   │ ╰── Unexpected '}'
+   │ 
+   │ Note: Expected one of: '='
+───╯

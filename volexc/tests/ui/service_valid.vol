@@ -1,0 +1,21 @@
+// pass
+// Valid service definition
+
+message Request {
+    id: u64 = 1
+}
+
+message Response {
+    data: string = 1
+}
+
+message Event {
+    name: string = 1
+}
+
+message ListRequest {}
+
+service MyService {
+    fn get(Request) -> Response = 1
+    fn list(ListRequest) -> stream Event = 2
+}

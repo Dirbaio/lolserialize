@@ -1,0 +1,7 @@
+Error: services cannot be used as types
+   ╭─[ service_as_type.vol:2:11 ]
+   │
+ 2 │     name: MyService = 1
+   │           ────┬────  
+   │               ╰────── service used as type
+───╯

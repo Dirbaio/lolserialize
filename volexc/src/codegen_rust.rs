@@ -43,6 +43,7 @@ impl<'a> CodeGenerator<'a> {
                 Item::Message(m) => self.gen_message(m),
                 Item::Enum(e) => self.gen_enum(e),
                 Item::Union(u) => self.gen_union(u),
+                Item::Service(_) => {} // TODO: codegen for services
             }
             self.output.push('\n');
         }
@@ -87,6 +88,7 @@ impl<'a> CodeGenerator<'a> {
                 .flat_map(|x| &x.node.ty)
                 .all(|ty| self.can_derive(ty, trait_)),
             Item::Enum(_) => true,
+            Item::Service(_) => unreachable!(),
         }
     }
 

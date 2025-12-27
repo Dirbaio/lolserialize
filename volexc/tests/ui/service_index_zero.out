@@ -1,0 +1,7 @@
+Error: index 0 is reserved in service `Foo`
+   ╭─[ service_index_zero.vol:7:35 ]
+   │
+ 7 │     fn bar(Request) -> Response = 0
+   │                                   ┬  
+   │                                   ╰── indices must be >= 1
+───╯

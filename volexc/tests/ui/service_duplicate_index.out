@@ -1,0 +1,10 @@
+Error: duplicate index 1 in service `Foo`
+   ╭─[ service_duplicate_index.vol:7:35 ]
+   │
+ 7 │     fn bar(Request) -> Response = 1
+   │                                   ┬  
+   │                                   ╰── first used here
+ 8 │     fn baz(Request) -> Response = 1
+   │                                   ┬  
+   │                                   ╰── reused here
+───╯

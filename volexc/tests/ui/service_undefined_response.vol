@@ -1,0 +1,7 @@
+// Undefined response type in service
+
+message Request {}
+
+service Foo {
+    fn bar(Request) -> UndefinedResponse = 1
+}

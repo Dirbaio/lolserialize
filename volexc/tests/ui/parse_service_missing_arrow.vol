@@ -1,0 +1,8 @@
+// Missing arrow in service method
+
+message Request {}
+message Response {}
+
+service Foo {
+    fn bar(Request) Response = 1
+}

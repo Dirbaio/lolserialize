@@ -1,0 +1,6 @@
+message Event {
+    name: MyService = 1
+}
+
+service MyService {
+}

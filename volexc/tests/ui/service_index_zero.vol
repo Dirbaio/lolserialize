@@ -1,0 +1,8 @@
+// Method index 0 is reserved in service
+
+message Request {}
+message Response {}
+
+service Foo {
+    fn bar(Request) -> Response = 0
+}

@@ -1,0 +1,7 @@
+Error: undefined type `UndefinedResponse`
+   ╭─[ service_undefined_response.vol:6:24 ]
+   │
+ 6 │     fn bar(Request) -> UndefinedResponse = 1
+   │                        ────────┬────────  
+   │                                ╰────────── not found
+───╯

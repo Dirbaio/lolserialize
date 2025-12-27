@@ -1,0 +1,9 @@
+Error: found 'Response' expected '->'
+   ╭─[ parse_service_missing_arrow.vol:7:21 ]
+   │
+ 7 │     fn bar(Request) Response = 1
+   │                     ────┬───  
+   │                         ╰───── Unexpected 'Response'
+   │ 
+   │ Note: Expected one of: '->'
+───╯

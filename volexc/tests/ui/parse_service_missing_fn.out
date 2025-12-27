@@ -1,0 +1,9 @@
+Error: found 'bar' expected 'fn', or '}'
+   ╭─[ parse_service_missing_fn.vol:7:5 ]
+   │
+ 7 │     bar(Request) -> Response = 1
+   │     ─┬─  
+   │      ╰─── Unexpected 'bar'
+   │ 
+   │ Note: Expected one of: 'fn', '}'
+───╯
