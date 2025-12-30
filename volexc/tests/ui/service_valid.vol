@@ -1,4 +1,6 @@
-// pass
+// rust:pass
+// go:pass
+// typescript:pass
 // Valid service definition
 
 message Request {

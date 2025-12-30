@@ -3,5 +3,7 @@ resolver = "2"
 members = [
     "runtime-rust",
     "volexc",
-    "tester"
+    "tester",
+    "rpc-tester",
+    "rpc-tester/harness/rust"
 ]

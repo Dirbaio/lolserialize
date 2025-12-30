@@ -1,0 +1,58 @@
+// RPC test schema
+
+message EchoRequest {
+    text: string = 1
+}
+
+message EchoResponse {
+    text: string = 1
+}
+
+message StreamRequest {
+    count: u32 = 1
+}
+
+message StreamItem {
+    seq: u32 = 1
+    data: string = 2
+}
+
+// For testing error handling
+message FailRequest {
+    should_fail: bool = 1
+    error_message: string = 2
+}
+
+message FailResponse {
+    success: bool = 1
+}
+
+// For cancellation testing
+message SlowRequest {
+    delay_ms: u32 = 1
+}
+
+message SlowResponse {
+    completed: bool = 1
+}
+
+// Empty request for get_status
+struct Empty {}
+
+service TestService {
+    fn echo(EchoRequest) -> EchoResponse = 1
+    fn subscribe(StreamRequest) -> stream StreamItem = 2
+    fn maybe_fail(FailRequest) -> FailResponse = 3
+    fn stream_then_fail(StreamRequest) -> stream StreamItem = 4
+
+    // Non-message types as request/response
+    fn add(u32) -> u32 = 5
+    fn get_strings(u32) -> stream string = 6
+
+    // Cancellation testing
+    fn slow_unary(SlowRequest) -> SlowResponse = 7
+    fn slow_stream(SlowRequest) -> stream StreamItem = 8
+
+    // Status tracking (for testing server-side cancellation detection)
+    fn get_status(Empty) -> string = 9
+}

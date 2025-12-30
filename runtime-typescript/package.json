@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "type": "module",
   "exports": {
-    ".": "./volex.ts"
+    ".": "./volex.ts",
+    "./rpc": "./rpc.ts"
   }
 }

@@ -1,0 +1,16 @@
+[package]
+name = "rust-harness"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "server"
+path = "src/server.rs"
+
+[[bin]]
+name = "client"
+path = "src/client.rs"
+
+[dependencies]
+volex = { path = "../../../runtime-rust", features = ["rpc"] }
+tokio = { version = "1", features = ["full"] }

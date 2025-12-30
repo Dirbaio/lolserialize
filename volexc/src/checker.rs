@@ -303,26 +303,26 @@ impl<'a> Checker<'a> {
 
     fn check_type(&mut self, ty: &Spanned<Type>) {
         match &ty.node {
-            Type::Named(name) => {
-                match self.schema.item(name.as_str()) {
-                    None => {
+            Type::Named(name) => match self.schema.item(name.as_str()) {
+                None => {
+                    self.errors
+                        .push(CheckError::new(format!("undefined type `{}`", name)).label(
+                            ty.span.clone(),
+                            "not found",
+                            Color::Red,
+                        ));
+                }
+                Some(item) => {
+                    if matches!(item.node, Item::Service(_)) {
                         self.errors
-                            .push(CheckError::new(format!("undefined type `{}`", name)).label(
+                            .push(CheckError::new(format!("services cannot be used as types")).label(
                                 ty.span.clone(),
-                                "not found",
+                                "service used as type",
                                 Color::Red,
                             ));
                     }
-                    Some(item) => {
-                        if matches!(item.node, Item::Service(_)) {
-                            self.errors.push(
-                                CheckError::new(format!("services cannot be used as types"))
-                                    .label(ty.span.clone(), "service used as type", Color::Red),
-                            );
-                        }
-                    }
                 }
-            }
+            },
             Type::Array(inner) => self.check_type(inner),
             Type::Map(key, value) => {
                 self.check_type(key);

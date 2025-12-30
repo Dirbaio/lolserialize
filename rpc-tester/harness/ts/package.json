@@ -1,0 +1,16 @@
+{
+  "name": "rpc-test",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "client": "npx tsx client.ts"
+  },
+  "dependencies": {
+    "volex": "file:../../../runtime-typescript"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0",
+    "typescript": "^5.3.0",
+    "@types/node": "^20.10.0"
+  }
+}

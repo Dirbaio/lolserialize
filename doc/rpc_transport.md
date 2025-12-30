@@ -41,79 +41,92 @@ Any transport that can deliver discrete binary messages can be used. The only re
 
 The message layer defines the RPC protocol messages exchanged between client and server. This layer is transport-agnostic.
 
+## Message Format
+
+All messages share a common header:
+
+```
+[message_type: u8] [call_id: LEB128] [payload...]
+```
+
+The `call_id` identifies which call the message belongs to. Call IDs are chosen by the client and must be unique among active calls on that connection. Once a call completes, the ID can be reused.
+
 ## Message Types
 
-Each message starts with a message type byte:
+Server→Client messages use IDs 0x00-0x7F. Client→Server messages use IDs 0x80-0xFF. This separation allows bidirectional RPC over a single transport.
 
-| Message Type     | ID  | Description                              |
-| ---------------- | --- | ---------------------------------------- |
-| REQUEST          | 1   | Request from client to server            |
-| RESPONSE         | 2   | Final response from server (ends call)   |
-| RESPONSE_STREAM  | 3   | Stream item from server (more to come)   |
-| CANCEL           | 4   | Cancel an in-progress call               |
+| Message Type  | ID   | Direction       | Description                            |
+| ------------- | ---- | --------------- | -------------------------------------- |
+| RESPONSE      | 0x00 | Server→Client   | Unary response (ends call)             |
+| STREAM_ITEM   | 0x01 | Server→Client   | Stream item (more to come)             |
+| STREAM_END    | 0x02 | Server→Client   | End of stream (ends call)              |
+| ERROR         | 0x03 | Server→Client   | Error response (ends call)             |
+| REQUEST       | 0x80 | Client→Server   | Request from client                    |
+| CANCEL        | 0x81 | Client→Server   | Cancel an in-progress call             |
 
-## Call IDs
+## Message Payloads
 
-Each call is identified by a `call_id` (u32). Call IDs are chosen by the client and must be unique among active calls on that connection. Once a call completes (RESPONSE or CANCEL), the ID can be reused.
-
-## Message Formats
-
-### REQUEST
+### REQUEST (0x80)
 
 Sends a request from client to server.
 
 ```
-[message_type: u8 = 1]
-[call_id: LEB128]
-[method_index: LEB128]
-[body: bytes]
+[0x80] [call_id: LEB128] [method_index: LEB128] [body: bytes]
 ```
 
-### RESPONSE
+### RESPONSE (0x00)
 
-Final response from server. Ends the call.
+Successful unary response. Ends the call.
 
 ```
-[message_type: u8 = 2]
-[call_id: LEB128]
-[status: u8]
-[body: bytes]           // Only if status = 0 (OK)
+[0x00] [call_id: LEB128] [body: bytes]
 ```
 
-Status codes:
-
-| Status | Meaning            |
-| ------ | ------------------ |
-| 0      | OK                 |
-| 1      | Unknown method     |
-| 2      | Decode error       |
-| 3      | Internal error     |
-| 4      | Cancelled          |
-
-For unary methods, the body contains the response. For streaming methods, RESPONSE signals the end of the stream (body is empty).
-
-### RESPONSE_STREAM
+### STREAM_ITEM (0x01)
 
 Stream item from server. Used for streaming methods.
 
 ```
-[message_type: u8 = 3]
-[call_id: LEB128]
-[body: bytes]
+[0x01] [call_id: LEB128] [body: bytes]
 ```
 
-The server sends zero or more RESPONSE_STREAM messages, followed by a final RESPONSE to end the call.
+The server sends zero or more STREAM_ITEM messages, followed by either STREAM_END or ERROR to end the call.
 
-### CANCEL
+### STREAM_END (0x02)
+
+Signals successful end of a stream. Ends the call.
+
+```
+[0x02] [call_id: LEB128]
+```
+
+### ERROR (0x03)
+
+Error response. Ends the call.
+
+```
+[0x03] [call_id: LEB128] [error_code: LEB128] [error_message: string]
+```
+
+Error codes:
+
+| Code | Meaning            |
+| ---- | ------------------ |
+| 1    | Unknown method     |
+| 2    | Decode error       |
+| 3    | Handler error      |
+
+The error message is a human-readable description encoded as a volex string (LEB128 length + UTF-8 bytes).
+
+### CANCEL (0x81)
 
 Requests cancellation of an in-progress call.
 
 ```
-[message_type: u8 = 4]
-[call_id: LEB128]
+[0x81] [call_id: LEB128]
 ```
 
-Sent by the client to abort a call. The server should stop processing and respond with status=4 (Cancelled).
+Sent by the client to abort a call. The server should stop processing and respond with an ERROR.
 
 ## Call Flows
 
@@ -129,7 +142,6 @@ Client                          Server
   |                               |
   |<-------- RESPONSE ------------|
   |   call_id=1                   |
-  |   status=0                    |
   |   body=...                    |
   |                               |
 ```
@@ -144,17 +156,33 @@ Client                          Server
   |   method_index=2              |
   |   body=...                    |
   |                               |
-  |<--- RESPONSE_STREAM ----------|
+  |<------- STREAM_ITEM ----------|
   |   call_id=1                   |
   |   body=...                    |
   |                               |
-  |<--- RESPONSE_STREAM ----------|
+  |<------- STREAM_ITEM ----------|
   |   call_id=1                   |
   |   body=...                    |
   |                               |
-  |<-------- RESPONSE ------------|
+  |<------- STREAM_END -----------|
   |   call_id=1                   |
-  |   status=0                    |
+  |                               |
+```
+
+### Error
+
+```
+Client                          Server
+  |                               |
+  |-------- REQUEST ------------->|
+  |   call_id=1                   |
+  |   method_index=99             |
+  |   body=...                    |
+  |                               |
+  |<---------- ERROR -------------|
+  |   call_id=1                   |
+  |   error_code=1                |
+  |   error_message="unknown..."  |
   |                               |
 ```
 
@@ -167,10 +195,10 @@ Client                          Server
   |                               |
   |-- REQUEST (call_id=1) ------->|
   |-- REQUEST (call_id=2) ------->|
-  |<-- RESPONSE_STREAM (call_id=1)|
+  |<-- STREAM_ITEM (call_id=1) ---|
   |<-- RESPONSE (call_id=2) ------|
-  |<-- RESPONSE_STREAM (call_id=1)|
-  |<-- RESPONSE (call_id=1) ------|
+  |<-- STREAM_ITEM (call_id=1) ---|
+  |<-- STREAM_END (call_id=1) ----|
   |                               |
 ```
 
@@ -185,7 +213,7 @@ service UserService {
 }
 ```
 
-The `method_index` in REQUEST frames corresponds to these indices. Unknown method indices result in a RESPONSE with status=1 (Unknown method).
+The `method_index` in REQUEST frames corresponds to these indices. Unknown method indices result in an ERROR message with code=1.
 
 ## Connection Lifecycle
 
@@ -197,15 +225,14 @@ The `method_index` in REQUEST frames corresponds to these indices. Unknown metho
 
 ## Error Handling
 
-Errors are reported via the RESPONSE frame's status field. Application-level errors should be encoded in the response message itself (using union types as shown in the language reference), while protocol-level errors use status codes.
+Protocol-level errors are reported via the ERROR message. Application-level errors should be encoded in the response message itself (using union types as shown in the language reference).
 
-| Scenario | Handling |
-| -------- | -------- |
-| Unknown method | RESPONSE with status=1 |
-| Malformed request | RESPONSE with status=2 |
-| Server internal error | RESPONSE with status=3 |
-| Client cancellation | RESPONSE with status=4 |
-| Connection closed | Implicit cancellation of all in-flight calls |
+| Scenario              | Handling                    |
+| --------------------- | --------------------------- |
+| Unknown method        | ERROR with code=1           |
+| Malformed request     | ERROR with code=2           |
+| Handler error         | ERROR with code=3           |
+| Connection closed     | Implicit cancellation       |
 
 ## Example Wire Encoding
 
@@ -229,7 +256,7 @@ A call to `echo` with `{ text: "hello" }`:
 
 **REQUEST message:**
 ```
-Message type: 0x01 (REQUEST)
+Message type: 0x80 (REQUEST)
 Call ID:      0x01 (1)
 Method index: 0x01 (1)
 Body:         0c 05 68 65 6c 6c 6f 00
@@ -240,9 +267,8 @@ Body:         0c 05 68 65 6c 6c 6f 00
 
 **RESPONSE message:**
 ```
-Message type: 0x02 (RESPONSE)
+Message type: 0x00 (RESPONSE)
 Call ID:      0x01 (1)
-Status:       0x00 (OK)
 Body:         0c 05 68 65 6c 6c 6f 00
               └─ same encoding as request
 ```

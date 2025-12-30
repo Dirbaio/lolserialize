@@ -346,7 +346,11 @@ where
     // Service method: fn name(Type) -> Type = index
     let service_method = just(Token::Fn)
         .ignore_then(ident.clone().map_with(spanned))
-        .then(spanned_ty.clone().delimited_by(just(Token::LParen), just(Token::RParen)))
+        .then(
+            spanned_ty
+                .clone()
+                .delimited_by(just(Token::LParen), just(Token::RParen)),
+        )
         .then(service_response)
         .then_ignore(just(Token::Eq))
         .then(int.clone().map_with(spanned))

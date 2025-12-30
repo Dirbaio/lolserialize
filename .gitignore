@@ -1,2 +1,8 @@
 /target
 temp
+generated.go
+generated.rs
+generated.ts
+generated.js
+node_modules
+package-lock.json

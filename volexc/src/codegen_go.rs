@@ -47,7 +47,17 @@ impl<'a> GoCodeGenerator<'a> {
             _ => false,
         });
 
+        // Check if we need context (for services)
+        let needs_context = self
+            .schema
+            .items
+            .iter()
+            .any(|item| matches!(&item.node, Item::Service(_)));
+
         self.output.push_str("import (\n");
+        if needs_context {
+            self.output.push_str("\t\"context\"\n");
+        }
         if needs_json {
             self.output.push_str("\t\"encoding/json\"\n");
         }
@@ -60,7 +70,7 @@ impl<'a> GoCodeGenerator<'a> {
                 Item::Message(m) => self.gen_message(m),
                 Item::Enum(e) => self.gen_enum(e),
                 Item::Union(u) => self.gen_union(u),
-                Item::Service(_) => {} // TODO: codegen for services
+                Item::Service(s) => self.gen_service(s),
             }
             self.output.push('\n');
         }
@@ -1229,6 +1239,418 @@ impl<'a> GoCodeGenerator<'a> {
             crate::schema::WireType::Message => "__rt.WireMessage",
             crate::schema::WireType::Union => "__rt.WireUnion",
             crate::schema::WireType::Unit => "__rt.WireUnit",
+        }
+    }
+
+    fn gen_service(&mut self, s: &Service) {
+        let service_name = &s.name.node;
+
+        // Generate the service interface
+        writeln!(
+            self.output,
+            "// {} is the interface for the {} service.",
+            service_name, service_name
+        )
+        .unwrap();
+        writeln!(self.output, "type {} interface {{", service_name).unwrap();
+        for method in &s.methods {
+            let method_name = to_pascal_case(&method.name.node);
+            let request_type = self.go_type(&method.request.node);
+            match &method.response.node {
+                ServiceResponse::Unary(resp_ty) => {
+                    let response_type = self.go_type(resp_ty);
+                    writeln!(
+                        self.output,
+                        "\t{}(ctx context.Context, req {}) ({}, error)",
+                        method_name, request_type, response_type
+                    )
+                    .unwrap();
+                }
+                ServiceResponse::Stream(_) => {
+                    writeln!(
+                        self.output,
+                        "\t{}(ctx context.Context, req {}, stream {}{}Stream) error",
+                        method_name, request_type, service_name, method_name
+                    )
+                    .unwrap();
+                }
+            }
+        }
+        writeln!(self.output, "}}\n").unwrap();
+
+        // Generate stream interfaces for streaming methods
+        for method in &s.methods {
+            if let ServiceResponse::Stream(resp_ty) = &method.response.node {
+                let method_name = to_pascal_case(&method.name.node);
+                let response_type = self.go_type(resp_ty);
+                writeln!(
+                    self.output,
+                    "// {}{}Stream is used to send streaming responses for the {} method.",
+                    service_name, method_name, method.name.node
+                )
+                .unwrap();
+                writeln!(self.output, "type {}{}Stream interface {{", service_name, method_name).unwrap();
+                writeln!(self.output, "\tSend(item {}) error", response_type).unwrap();
+                writeln!(self.output, "}}\n").unwrap();
+            }
+        }
+
+        // Generate the server struct
+        writeln!(
+            self.output,
+            "// {}Server handles incoming RPC requests for the {} service.",
+            service_name, service_name
+        )
+        .unwrap();
+        writeln!(self.output, "type {}Server struct {{", service_name).unwrap();
+        writeln!(self.output, "\tbase *__rt.ServerBase").unwrap();
+        writeln!(self.output, "\timpl {}", service_name).unwrap();
+        writeln!(self.output, "}}\n").unwrap();
+
+        // Generate server constructor
+        writeln!(
+            self.output,
+            "// New{}Server creates a new server for the {} service.",
+            service_name, service_name
+        )
+        .unwrap();
+        writeln!(
+            self.output,
+            "func New{}Server(transport __rt.Transport, impl {}) *{}Server {{",
+            service_name, service_name, service_name
+        )
+        .unwrap();
+        writeln!(self.output, "\ts := &{}Server{{", service_name).unwrap();
+        writeln!(self.output, "\t\tbase: __rt.NewServerBase(transport),").unwrap();
+        writeln!(self.output, "\t\timpl: impl,").unwrap();
+        writeln!(self.output, "\t}}").unwrap();
+
+        // Register handlers for each method
+        for method in &s.methods {
+            let method_name = to_pascal_case(&method.name.node);
+            let index = method.index.node;
+            writeln!(
+                self.output,
+                "\ts.base.RegisterHandler({}, s.handle{})",
+                index, method_name
+            )
+            .unwrap();
+        }
+
+        writeln!(self.output, "\treturn s").unwrap();
+        writeln!(self.output, "}}\n").unwrap();
+
+        // Generate Serve method
+        writeln!(
+            self.output,
+            "// Serve starts serving requests. It runs until the context is canceled or an error occurs."
+        )
+        .unwrap();
+        writeln!(
+            self.output,
+            "func (s *{}Server) Serve(ctx context.Context) error {{",
+            service_name
+        )
+        .unwrap();
+        writeln!(self.output, "\treturn s.base.Serve(ctx)").unwrap();
+        writeln!(self.output, "}}\n").unwrap();
+
+        // Generate handler methods for each service method
+        for method in &s.methods {
+            let method_name = to_pascal_case(&method.name.node);
+
+            writeln!(
+                self.output,
+                "func (s *{}Server) handle{}(ctx context.Context, payload []byte, sender *__rt.ResponseSender) error {{",
+                service_name, method_name
+            )
+            .unwrap();
+
+            // Decode the request
+            writeln!(self.output, "\tbuf := payload").unwrap();
+            writeln!(
+                self.output,
+                "\treq, err := {}",
+                self.decode_for_service(&method.request.node, "&buf")
+            )
+            .unwrap();
+            writeln!(self.output, "\tif err != nil {{").unwrap();
+            writeln!(self.output, "\t\treturn err").unwrap();
+            writeln!(self.output, "\t}}").unwrap();
+
+            match &method.response.node {
+                ServiceResponse::Unary(resp_ty) => {
+                    // Call the implementation
+                    writeln!(self.output, "\tresp, err := s.impl.{}(ctx, req)", method_name).unwrap();
+                    writeln!(self.output, "\tif err != nil {{").unwrap();
+                    writeln!(self.output, "\t\treturn err").unwrap();
+                    writeln!(self.output, "\t}}").unwrap();
+
+                    // Encode and send the response
+                    writeln!(self.output, "\tvar respBuf []byte").unwrap();
+                    self.encode_value_for_service("resp", resp_ty, 1, "respBuf");
+                    writeln!(self.output, "\treturn sender.SendResponse(respBuf)").unwrap();
+                }
+                ServiceResponse::Stream(_) => {
+                    // Create stream sender and call the implementation
+                    writeln!(
+                        self.output,
+                        "\tstream := &{}{}ServerStream{{sender: sender}}",
+                        service_name, method_name
+                    )
+                    .unwrap();
+                    writeln!(self.output, "\terr = s.impl.{}(ctx, req, stream)", method_name).unwrap();
+                    writeln!(self.output, "\tif err != nil {{").unwrap();
+                    writeln!(self.output, "\t\treturn err").unwrap();
+                    writeln!(self.output, "\t}}").unwrap();
+                    writeln!(self.output, "\treturn sender.SendStreamEnd()").unwrap();
+                }
+            }
+
+            writeln!(self.output, "}}\n").unwrap();
+        }
+
+        // Generate stream sender structs for streaming methods
+        for method in &s.methods {
+            if let ServiceResponse::Stream(resp_ty) = &method.response.node {
+                let method_name = to_pascal_case(&method.name.node);
+                let response_type = self.go_type(resp_ty);
+
+                writeln!(
+                    self.output,
+                    "type {}{}ServerStream struct {{",
+                    service_name, method_name
+                )
+                .unwrap();
+                writeln!(self.output, "\tsender *__rt.ResponseSender").unwrap();
+                writeln!(self.output, "}}\n").unwrap();
+
+                writeln!(
+                    self.output,
+                    "func (s *{}{}ServerStream) Send(item {}) error {{",
+                    service_name, method_name, response_type
+                )
+                .unwrap();
+                writeln!(self.output, "\tvar buf []byte").unwrap();
+                self.encode_value_for_service("item", resp_ty, 1, "buf");
+                writeln!(self.output, "\treturn s.sender.SendStreamItem(buf)").unwrap();
+                writeln!(self.output, "}}\n").unwrap();
+            }
+        }
+
+        // Generate the client struct
+        writeln!(
+            self.output,
+            "// {}Client is a client for the {} service.",
+            service_name, service_name
+        )
+        .unwrap();
+        writeln!(self.output, "type {}Client struct {{", service_name).unwrap();
+        writeln!(self.output, "\tbase *__rt.ClientBase").unwrap();
+        writeln!(self.output, "}}\n").unwrap();
+
+        // Generate client constructor
+        writeln!(
+            self.output,
+            "// New{}Client creates a new client for the {} service.",
+            service_name, service_name
+        )
+        .unwrap();
+        writeln!(
+            self.output,
+            "func New{}Client(transport __rt.Transport) *{}Client {{",
+            service_name, service_name
+        )
+        .unwrap();
+        writeln!(self.output, "\treturn &{}Client{{", service_name).unwrap();
+        writeln!(self.output, "\t\tbase: __rt.NewClientBase(transport),").unwrap();
+        writeln!(self.output, "\t}}").unwrap();
+        writeln!(self.output, "}}\n").unwrap();
+
+        // Generate Start method
+        writeln!(
+            self.output,
+            "// Start starts the client's receive loop. Must be called before making RPC calls."
+        )
+        .unwrap();
+        writeln!(
+            self.output,
+            "func (c *{}Client) Start(ctx context.Context) {{",
+            service_name
+        )
+        .unwrap();
+        writeln!(self.output, "\tc.base.Start(ctx)").unwrap();
+        writeln!(self.output, "}}\n").unwrap();
+
+        // Generate client methods
+        for method in &s.methods {
+            let method_name = to_pascal_case(&method.name.node);
+            let request_type = self.go_type(&method.request.node);
+            let index = method.index.node;
+
+            match &method.response.node {
+                ServiceResponse::Unary(resp_ty) => {
+                    let response_type = self.go_type(resp_ty);
+
+                    writeln!(self.output, "// {} calls the {} method.", method_name, method.name.node).unwrap();
+                    writeln!(
+                        self.output,
+                        "func (c *{}Client) {}(ctx context.Context, req {}) ({}, error) {{",
+                        service_name, method_name, request_type, response_type
+                    )
+                    .unwrap();
+
+                    // Encode the request
+                    writeln!(self.output, "\tvar reqBuf []byte").unwrap();
+                    self.encode_value_for_service("req", &method.request.node, 1, "reqBuf");
+
+                    // Make the call
+                    writeln!(
+                        self.output,
+                        "\trespBuf, err := c.base.CallUnary(ctx, {}, reqBuf)",
+                        index
+                    )
+                    .unwrap();
+                    writeln!(self.output, "\tif err != nil {{").unwrap();
+                    writeln!(self.output, "\t\tvar zero {}", response_type).unwrap();
+                    writeln!(self.output, "\t\treturn zero, err").unwrap();
+                    writeln!(self.output, "\t}}").unwrap();
+
+                    // Decode the response
+                    writeln!(
+                        self.output,
+                        "\tresp, err := {}",
+                        self.decode_for_service(resp_ty, "&respBuf")
+                    )
+                    .unwrap();
+                    writeln!(self.output, "\tif err != nil {{").unwrap();
+                    writeln!(self.output, "\t\tvar zero {}", response_type).unwrap();
+                    writeln!(self.output, "\t\treturn zero, err").unwrap();
+                    writeln!(self.output, "\t}}").unwrap();
+                    writeln!(self.output, "\treturn resp, nil").unwrap();
+                    writeln!(self.output, "}}\n").unwrap();
+                }
+                ServiceResponse::Stream(resp_ty) => {
+                    let response_type = self.go_type(resp_ty);
+
+                    writeln!(
+                        self.output,
+                        "// {} calls the {} method and returns a stream receiver.",
+                        method_name, method.name.node
+                    )
+                    .unwrap();
+                    writeln!(
+                        self.output,
+                        "func (c *{}Client) {}(ctx context.Context, req {}) (*{}{}ClientStream, error) {{",
+                        service_name, method_name, request_type, service_name, method_name
+                    )
+                    .unwrap();
+
+                    // Encode the request
+                    writeln!(self.output, "\tvar reqBuf []byte").unwrap();
+                    self.encode_value_for_service("req", &method.request.node, 1, "reqBuf");
+
+                    // Make the call
+                    writeln!(
+                        self.output,
+                        "\treceiver, err := c.base.CallStream(ctx, {}, reqBuf)",
+                        index
+                    )
+                    .unwrap();
+                    writeln!(self.output, "\tif err != nil {{").unwrap();
+                    writeln!(self.output, "\t\treturn nil, err").unwrap();
+                    writeln!(self.output, "\t}}").unwrap();
+
+                    writeln!(
+                        self.output,
+                        "\treturn &{}{}ClientStream{{receiver: receiver}}, nil",
+                        service_name, method_name
+                    )
+                    .unwrap();
+                    writeln!(self.output, "}}\n").unwrap();
+
+                    // Generate client stream struct
+                    writeln!(
+                        self.output,
+                        "// {}{}ClientStream receives streaming responses.",
+                        service_name, method_name
+                    )
+                    .unwrap();
+                    writeln!(
+                        self.output,
+                        "type {}{}ClientStream struct {{",
+                        service_name, method_name
+                    )
+                    .unwrap();
+                    writeln!(self.output, "\treceiver *__rt.StreamReceiver").unwrap();
+                    writeln!(self.output, "}}\n").unwrap();
+
+                    // Generate Recv method
+                    writeln!(
+                        self.output,
+                        "// Recv receives the next item from the stream. Returns ({}, __rt.ErrStreamClosed) when the stream ends.",
+                        response_type
+                    )
+                    .unwrap();
+                    writeln!(
+                        self.output,
+                        "func (s *{}{}ClientStream) Recv() ({}, error) {{",
+                        service_name, method_name, response_type
+                    )
+                    .unwrap();
+                    writeln!(self.output, "\tdata, err := s.receiver.Recv()").unwrap();
+                    writeln!(self.output, "\tif err != nil {{").unwrap();
+                    writeln!(self.output, "\t\tvar zero {}", response_type).unwrap();
+                    writeln!(self.output, "\t\treturn zero, err").unwrap();
+                    writeln!(self.output, "\t}}").unwrap();
+                    writeln!(self.output, "\tbuf := data").unwrap();
+                    writeln!(
+                        self.output,
+                        "\tresp, err := {}",
+                        self.decode_for_service(resp_ty, "&buf")
+                    )
+                    .unwrap();
+                    writeln!(self.output, "\tif err != nil {{").unwrap();
+                    writeln!(self.output, "\t\tvar zero {}", response_type).unwrap();
+                    writeln!(self.output, "\t\treturn zero, err").unwrap();
+                    writeln!(self.output, "\t}}").unwrap();
+                    writeln!(self.output, "\treturn resp, nil").unwrap();
+                    writeln!(self.output, "}}").unwrap();
+                }
+            }
+        }
+    }
+
+    fn decode_for_service(&self, ty: &Type, buf_var: &str) -> String {
+        match ty {
+            Type::Named(name) => format!("Decode{}({})", name, buf_var),
+            Type::Bool => format!("__rt.DecodeBool({})", buf_var),
+            Type::U8 => format!("__rt.DecodeU8({})", buf_var),
+            Type::U16 => format!("__rt.DecodeU16({})", buf_var),
+            Type::U32 => format!("__rt.DecodeU32({})", buf_var),
+            Type::U64 => format!("__rt.DecodeU64({})", buf_var),
+            Type::I8 => format!("__rt.DecodeI8({})", buf_var),
+            Type::I16 => format!("__rt.DecodeI16({})", buf_var),
+            Type::I32 => format!("__rt.DecodeI32({})", buf_var),
+            Type::I64 => format!("__rt.DecodeI64({})", buf_var),
+            Type::F32 => format!("__rt.DecodeF32({})", buf_var),
+            Type::F64 => format!("__rt.DecodeF64({})", buf_var),
+            Type::String => format!("__rt.DecodeString({})", buf_var),
+            Type::Array(_) | Type::Map(_, _) => panic!("Array/Map types not supported for RPC"),
+        }
+    }
+
+    fn encode_value_for_service(&mut self, value: &str, ty: &Type, indent: usize, buf_var: &str) {
+        let tabs = "\t".repeat(indent);
+        // For services, we always encode the full value (not inside a BYTES field)
+        match ty {
+            Type::Named(_) => {
+                writeln!(self.output, "{}{}.Encode(&{})", tabs, value, buf_var).unwrap();
+            }
+            _ => {
+                // For primitive types, use the standard encode functions with the proper buffer
+                self.encode_value_to_buf(value, ty, indent, &format!("&{}", buf_var), false);
+            }
         }
     }
 }
