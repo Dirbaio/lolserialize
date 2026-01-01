@@ -42,15 +42,23 @@ impl Language {
     }
 }
 
+fn is_false(b: &bool) -> bool {
+    !*b
+}
+
+fn is_empty_vec(v: &Vec<String>) -> bool {
+    v.is_empty()
+}
+
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
 struct TestCase {
     r#type: String,
     description: String,
     hex: String,
     json: serde_json::Value,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "is_false")]
     nondeterministic_encode: bool,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "is_empty_vec")]
     skip_languages: Vec<String>,
 }
 
