@@ -275,9 +275,9 @@ type streamResult struct {
 
 // pendingRequest tracks an in-flight request.
 type pendingRequest struct {
-	respChan   chan []byte        // For unary responses
-	streamChan chan streamResult  // For streaming responses (items, errors, and end)
-	errChan    chan error         // For unary errors
+	respChan   chan []byte       // For unary responses
+	streamChan chan streamResult // For streaming responses (items, errors, and end)
+	errChan    chan error        // For unary errors
 	isStream   bool
 }
 
@@ -301,33 +301,33 @@ func NewClientBase(transport Transport) *ClientBase {
 	}
 }
 
-// Start starts the background goroutine that receives responses.
-// Must be called before making any RPC calls.
-func (c *ClientBase) Start(ctx context.Context) {
+// Run runs the client's receive loop until the context is canceled or the transport fails.
+// Must be called before making any RPC calls. This method blocks until an error occurs.
+func (c *ClientBase) Run(ctx context.Context) error {
 	c.mu.Lock()
 	if c.recvRunning {
 		c.mu.Unlock()
-		return
+		return errors.New("client already running")
 	}
 	c.recvRunning = true
 	c.mu.Unlock()
 
-	go c.receiveLoop(ctx)
+	return c.receiveLoop(ctx)
 }
 
-func (c *ClientBase) receiveLoop(ctx context.Context) {
+func (c *ClientBase) receiveLoop(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
 			c.setRecvError(ctx.Err())
-			return
+			return ctx.Err()
 		default:
 		}
 
 		data, err := c.transport.Recv(ctx)
 		if err != nil {
 			c.setRecvError(err)
-			return
+			return err
 		}
 
 		c.handleResponse(data)

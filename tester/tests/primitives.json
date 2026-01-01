@@ -13,9 +13,9 @@
     "description": "u8: zero, small, max (255)",
     "hex": "002aff",
     "json": {
-      "zero": 0,
+      "max": 255,
       "small": 42,
-      "max": 255
+      "zero": 0
     }
   },
   {
@@ -23,11 +23,11 @@
     "description": "i8: zero, positive, negative, max (127), min (-128)",
     "hex": "002ad67f80",
     "json": {
-      "zero": 0,
-      "positive": 42,
-      "negative": -42,
       "max": 127,
-      "min": -128
+      "min": -128,
+      "negative": -42,
+      "positive": 42,
+      "zero": 0
     }
   },
   {
@@ -35,14 +35,14 @@
     "description": "f32: various values including special cases",
     "hex": "000000000000803f000080bfdb0f4940ffff7f7f000080009976967e997696fe",
     "json": {
-      "zero": 0.0,
-      "one": 1.0,
-      "negative": -1.0,
-      "pi": 3.1415927410125732,
-      "max": 3.4028234663852886e38,
+      "infinity": 9.999999680285692e+37,
+      "max": 3.4028234663852886e+38,
       "min": 1.1754943508222875e-38,
-      "infinity": 9.999999680285692e37,
-      "neg_infinity": -9.999999680285692e37
+      "neg_infinity": -9.999999680285692e+37,
+      "negative": -1.0,
+      "one": 1.0,
+      "pi": 3.1415927410125732,
+      "zero": 0.0
     }
   },
   {
@@ -50,14 +50,14 @@
     "description": "f64: various values including special cases",
     "hex": "0000000000000000000000000000f03f000000000000f0bf182d4454fb210940ffffffffffffef7f0000000000001000a0c8eb85f3cce17fa0c8eb85f3cce1ff",
     "json": {
-      "zero": 0.0,
-      "one": 1.0,
-      "negative": -1.0,
-      "pi": 3.141592653589793,
-      "max": 1.7976931348623157e308,
+      "infinity": 1e+308,
+      "max": 1.7976931348623157e+308,
       "min": 2.2250738585072014e-308,
-      "infinity": 1e308,
-      "neg_infinity": -1e308
+      "neg_infinity": -1e+308,
+      "negative": -1.0,
+      "one": 1.0,
+      "pi": 3.141592653589793,
+      "zero": 0.0
     }
   },
   {
@@ -65,14 +65,14 @@
     "description": "u16: LEB128 encoding boundaries",
     "hex": "00012a7f8001ff7f808001ffff03",
     "json": {
-      "zero": 0,
-      "one": 1,
-      "small": 42,
       "boundary_127": 127,
       "boundary_128": 128,
       "boundary_16383": 16383,
       "boundary_16384": 16384,
-      "max": 65535
+      "max": 65535,
+      "one": 1,
+      "small": 42,
+      "zero": 0
     }
   },
   {
@@ -80,13 +80,13 @@
     "description": "u32: LEB128 encoding boundaries",
     "hex": "0001ac027f8001808001ffffffff0f",
     "json": {
-      "zero": 0,
-      "one": 1,
-      "small": 300,
       "boundary_127": 127,
       "boundary_128": 128,
       "large": 16384,
-      "max": 4294967295
+      "max": 4294967295,
+      "one": 1,
+      "small": 300,
+      "zero": 0
     }
   },
   {
@@ -94,27 +94,29 @@
     "description": "u64: LEB128 encoding boundaries",
     "hex": "0001ac027f8001808001ffffffffffffffffff01",
     "json": {
-      "zero": 0,
-      "one": 1,
-      "small": 300,
       "boundary_127": 127,
       "boundary_128": 128,
       "large": 16384,
-      "max": 18446744073709551615
+      "max": 18446744073709551615,
+      "one": 1,
+      "small": 300,
+      "zero": 0
     },
-    "skip_languages": ["typescript"]
+    "skip_languages": [
+      "typescript"
+    ]
   },
   {
     "type": "AllI16",
     "description": "i16: zigzag + LEB128 encoding",
     "hex": "0080017f01feff03ffff03",
     "json": {
-      "zero": 0,
-      "positive": 64,
-      "negative": -64,
-      "neg_one": -1,
       "max": 32767,
-      "min": -32768
+      "min": -32768,
+      "neg_one": -1,
+      "negative": -64,
+      "positive": 64,
+      "zero": 0
     }
   },
   {
@@ -122,12 +124,12 @@
     "description": "i32: zigzag + LEB128 encoding",
     "hex": "0080017f01feffffff0fffffffff0f",
     "json": {
-      "zero": 0,
-      "positive": 64,
-      "negative": -64,
-      "neg_one": -1,
       "max": 2147483647,
-      "min": -2147483648
+      "min": -2147483648,
+      "neg_one": -1,
+      "negative": -64,
+      "positive": 64,
+      "zero": 0
     }
   },
   {
@@ -135,14 +137,16 @@
     "description": "i64: zigzag + LEB128 encoding",
     "hex": "0080017f01feffffffffffffffff01ffffffffffffffffff01",
     "json": {
-      "zero": 0,
-      "positive": 64,
-      "negative": -64,
-      "neg_one": -1,
       "max": 9223372036854775807,
-      "min": -9223372036854775808
+      "min": -9223372036854775808,
+      "neg_one": -1,
+      "negative": -64,
+      "positive": 64,
+      "zero": 0
     },
-    "skip_languages": ["typescript"]
+    "skip_languages": [
+      "typescript"
+    ]
   },
   {
     "type": "StringTests",
@@ -295,7 +299,7 @@
   {
     "type": "MapEnumU32",
     "description": "map enum:u32: multiple entries",
-    "hex": "03006402ac0201c801",
+    "hex": "0302ac02006401c801",
     "json": {
       "values": {
         "Alpha": 100,
@@ -303,7 +307,271 @@
         "Gamma": 300
       }
     },
+    "nondeterministic_encode": true
+  },
+  {
+    "type": "ArrayOfArrayU8",
+    "description": "array of array u8: empty",
+    "hex": "00",
+    "json": {
+      "values": []
+    }
+  },
+  {
+    "type": "ArrayOfArrayU8",
+    "description": "array of array u8: single empty inner array",
+    "hex": "0100",
+    "json": {
+      "values": [
+        []
+      ]
+    },
+    "skip_languages": [
+      "go"
+    ]
+  },
+  {
+    "type": "ArrayOfArrayU8",
+    "description": "array of array u8: single inner array with elements",
+    "hex": "0103010203",
+    "json": {
+      "values": [
+        [
+          1,
+          2,
+          3
+        ]
+      ]
+    },
+    "skip_languages": [
+      "go"
+    ]
+  },
+  {
+    "type": "ArrayOfArrayU8",
+    "description": "array of array u8: multiple inner arrays",
+    "hex": "030201020303040500",
+    "json": {
+      "values": [
+        [
+          1,
+          2
+        ],
+        [
+          3,
+          4,
+          5
+        ],
+        []
+      ]
+    },
+    "skip_languages": [
+      "go"
+    ]
+  },
+  {
+    "type": "ArrayOfArrayString",
+    "description": "array of array string: empty",
+    "hex": "00",
+    "json": {
+      "values": []
+    }
+  },
+  {
+    "type": "ArrayOfArrayString",
+    "description": "array of array string: nested with values",
+    "hex": "03020568656c6c6f05776f726c640103666f6f00",
+    "json": {
+      "values": [
+        [
+          "hello",
+          "world"
+        ],
+        [
+          "foo"
+        ],
+        []
+      ]
+    }
+  },
+  {
+    "type": "MapStringMapStringU32",
+    "description": "map of maps: empty",
+    "hex": "00",
+    "json": {
+      "values": {}
+    }
+  },
+  {
+    "type": "MapStringMapStringU32",
+    "description": "map of maps: single entry with empty inner map",
+    "hex": "01056f7574657200",
+    "json": {
+      "values": {
+        "outer": {}
+      }
+    }
+  },
+  {
+    "type": "MapStringMapStringU32",
+    "description": "map of maps: nested values",
+    "hex": "0205666972737402016101016202067365636f6e6401016303",
+    "json": {
+      "values": {
+        "first": {
+          "a": 1,
+          "b": 2
+        },
+        "second": {
+          "c": 3
+        }
+      }
+    },
+    "nondeterministic_encode": true
+  },
+  {
+    "type": "MapStringArrayU8",
+    "description": "map of arrays: empty",
+    "hex": "00",
+    "json": {
+      "values": {}
+    }
+  },
+  {
+    "type": "MapStringArrayU8",
+    "description": "map of arrays: single entry with empty array",
+    "hex": "01036b657900",
+    "json": {
+      "values": {
+        "key": []
+      }
+    },
+    "skip_languages": [
+      "go"
+    ]
+  },
+  {
+    "type": "MapStringArrayU8",
+    "description": "map of arrays: multiple entries with arrays",
+    "hex": "02046e756d7303010203046d6f7265020a14",
+    "json": {
+      "values": {
+        "more": [
+          10,
+          20
+        ],
+        "nums": [
+          1,
+          2,
+          3
+        ]
+      }
+    },
     "nondeterministic_encode": true,
-    "skip_languages": []
+    "skip_languages": [
+      "go"
+    ]
+  },
+  {
+    "type": "ArrayMapStringU32",
+    "description": "array of maps: empty",
+    "hex": "00",
+    "json": {
+      "values": []
+    }
+  },
+  {
+    "type": "ArrayMapStringU32",
+    "description": "array of maps: single empty map",
+    "hex": "0100",
+    "json": {
+      "values": [
+        {}
+      ]
+    }
+  },
+  {
+    "type": "ArrayMapStringU32",
+    "description": "array of maps: multiple maps with values",
+    "hex": "030201790201780101017a0300",
+    "json": {
+      "values": [
+        {
+          "x": 1,
+          "y": 2
+        },
+        {
+          "z": 3
+        },
+        {}
+      ]
+    },
+    "nondeterministic_encode": true
+  },
+  {
+    "type": "ArrayOfArrayOfArrayU8",
+    "description": "triple nested array: empty",
+    "hex": "00",
+    "json": {
+      "values": []
+    }
+  },
+  {
+    "type": "ArrayOfArrayOfArrayU8",
+    "description": "triple nested array: with values",
+    "hex": "020202010201030103040506",
+    "json": {
+      "values": [
+        [
+          [
+            1,
+            2
+          ],
+          [
+            3
+          ]
+        ],
+        [
+          [
+            4,
+            5,
+            6
+          ]
+        ]
+      ]
+    },
+    "skip_languages": [
+      "go"
+    ]
+  },
+  {
+    "type": "MapStringArrayMapStringU8",
+    "description": "complex nested: empty",
+    "hex": "00",
+    "json": {
+      "values": {}
+    }
+  },
+  {
+    "type": "MapStringArrayMapStringU8",
+    "description": "complex nested: with values",
+    "hex": "020667726f7570310202016101016202010163030667726f7570320100",
+    "json": {
+      "values": {
+        "group1": [
+          {
+            "a": 1,
+            "b": 2
+          },
+          {
+            "c": 3
+          }
+        ],
+        "group2": [
+          {}
+        ]
+      }
+    },
+    "nondeterministic_encode": true
   }
 ]

@@ -816,25 +816,30 @@ impl<'a> GoCodeGenerator<'a> {
         let tabs = "\t".repeat(indent);
         let elem_go_type = self.go_type(elem_ty);
 
+        // Use indent to create unique variable names to avoid shadowing in nested arrays
+        let count_var = format!("count{}", indent);
+        let idx_var = format!("i{}", indent);
+        let arr_var = if optional { format!("arr{}", indent) } else { target.to_string() };
+
         // Decode array length
-        writeln!(self.output, "{}count, err := __rt.DecodeLEB128(buf)", tabs).unwrap();
+        writeln!(self.output, "{}{}, err := __rt.DecodeLEB128(buf)", tabs, count_var).unwrap();
         writeln!(self.output, "{}if err != nil {{", tabs).unwrap();
         writeln!(self.output, "{}\treturn {}{{}}, err", tabs, parent_type).unwrap();
         writeln!(self.output, "{}}}", tabs).unwrap();
 
         if optional {
-            writeln!(self.output, "{}arr := make([]{}, count)", tabs, elem_go_type).unwrap();
+            writeln!(self.output, "{}{} := make([]{}, {})", tabs, arr_var, elem_go_type, count_var).unwrap();
         } else {
-            writeln!(self.output, "{}{} = make([]{}, count)", tabs, target, elem_go_type).unwrap();
+            writeln!(self.output, "{}{} = make([]{}, {})", tabs, target, elem_go_type, count_var).unwrap();
         }
 
-        writeln!(self.output, "{}for i := uint64(0); i < count; i++ {{", tabs).unwrap();
-        let item_target = if optional { "arr[i]" } else { &format!("{}[i]", target) };
-        self.decode_value_inline(item_target, elem_ty, indent + 1, parent_type);
+        writeln!(self.output, "{}for {} := uint64(0); {} < {}; {}++ {{", tabs, idx_var, idx_var, count_var, idx_var).unwrap();
+        let item_target = format!("{}[{}]", arr_var, idx_var);
+        self.decode_value_inline(&item_target, elem_ty, indent + 1, parent_type);
         writeln!(self.output, "{}}}", tabs).unwrap();
 
         if optional {
-            writeln!(self.output, "{}{} = &arr", tabs, target).unwrap();
+            writeln!(self.output, "{}{} = &{}", tabs, target, arr_var).unwrap();
         }
     }
 
@@ -851,8 +856,14 @@ impl<'a> GoCodeGenerator<'a> {
         let key_go_type = self.go_type(key_ty);
         let val_go_type = self.go_type(val_ty);
 
+        // Use indent to create unique variable names to avoid shadowing in nested maps
+        let key_var = format!("k{}", indent);
+        let val_var = format!("v{}", indent);
+        let count_var = format!("count{}", indent);
+        let map_var = if optional { format!("m{}", indent) } else { target.to_string() };
+
         // Decode map length
-        writeln!(self.output, "{}count, err := __rt.DecodeLEB128(buf)", tabs).unwrap();
+        writeln!(self.output, "{}{}, err := __rt.DecodeLEB128(buf)", tabs, count_var).unwrap();
         writeln!(self.output, "{}if err != nil {{", tabs).unwrap();
         writeln!(self.output, "{}\treturn {}{{}}, err", tabs, parent_type).unwrap();
         writeln!(self.output, "{}}}", tabs).unwrap();
@@ -860,37 +871,46 @@ impl<'a> GoCodeGenerator<'a> {
         if optional {
             writeln!(
                 self.output,
-                "{}m := make(map[{}]{}, count)",
-                tabs, key_go_type, val_go_type
+                "{}{} := make(map[{}]{}, {})",
+                tabs, map_var, key_go_type, val_go_type, count_var
             )
             .unwrap();
         } else {
             writeln!(
                 self.output,
-                "{}{} = make(map[{}]{}, count)",
-                tabs, target, key_go_type, val_go_type
+                "{}{} = make(map[{}]{}, {})",
+                tabs, target, key_go_type, val_go_type, count_var
             )
             .unwrap();
         }
 
-        writeln!(self.output, "{}for i := uint64(0); i < count; i++ {{", tabs).unwrap();
-        writeln!(self.output, "{}var k {}", tabs, key_go_type).unwrap();
-        writeln!(self.output, "{}var v {}", tabs, val_go_type).unwrap();
-        self.decode_value_inline("k", key_ty, indent + 1, parent_type);
-        self.decode_value_inline("v", val_ty, indent + 1, parent_type);
-        if optional {
-            writeln!(self.output, "{}m[k] = v", tabs).unwrap();
-        } else {
-            writeln!(self.output, "{}{}[k] = v", tabs, target).unwrap();
-        }
+        writeln!(self.output, "{}for i{} := uint64(0); i{} < {}; i{}++ {{", tabs, indent, indent, count_var, indent).unwrap();
+        writeln!(self.output, "{}\tvar {} {}", tabs, key_var, key_go_type).unwrap();
+        writeln!(self.output, "{}\tvar {} {}", tabs, val_var, val_go_type).unwrap();
+        self.decode_value_inline(&key_var, key_ty, indent + 1, parent_type);
+        self.decode_value_inline(&val_var, val_ty, indent + 1, parent_type);
+        writeln!(self.output, "{}\t{}[{}] = {}", tabs, map_var, key_var, val_var).unwrap();
         writeln!(self.output, "{}}}", tabs).unwrap();
 
         if optional {
-            writeln!(self.output, "{}{} = &m", tabs, target).unwrap();
+            writeln!(self.output, "{}{} = &{}", tabs, target, map_var).unwrap();
         }
     }
 
     fn decode_value_inline(&mut self, target: &str, ty: &Type, indent: usize, parent_type: &str) {
+        // Arrays and maps need specialized decoding
+        match ty {
+            Type::Array(inner) => {
+                self.decode_array(target, &inner.node, indent, false, parent_type);
+                return;
+            }
+            Type::Map(k, v) => {
+                self.decode_map(target, &k.node, &v.node, indent, false, parent_type);
+                return;
+            }
+            _ => {}
+        }
+
         let tabs = "\t".repeat(indent);
         let (decode_call, _) = self.decode_call(ty);
         writeln!(self.output, "{}{}, err = {}", tabs, target, decode_call).unwrap();
@@ -1085,39 +1105,44 @@ impl<'a> GoCodeGenerator<'a> {
         let tabs = "\t".repeat(indent);
         let elem_go_type = self.go_type(elem_ty);
 
+        // Use indent to create unique variable names to avoid shadowing in nested arrays
+        let count_var = format!("count{}", indent);
+        let idx_var = format!("i{}", indent);
+        let arr_var = if optional { format!("arr{}", indent) } else { target.to_string() };
+
         if let Some(elem_size) = self.schema.fixed_size(elem_ty) {
             // Fixed-size elements: no count prefix, infer count from length / element_size
-            writeln!(self.output, "{}count := {} / {}", tabs, length_var, elem_size).unwrap();
+            writeln!(self.output, "{}{} := {} / {}", tabs, count_var, length_var, elem_size).unwrap();
             if optional {
-                writeln!(self.output, "{}arr := make([]{}, count)", tabs, elem_go_type).unwrap();
+                writeln!(self.output, "{}{} := make([]{}, {})", tabs, arr_var, elem_go_type, count_var).unwrap();
             } else {
-                writeln!(self.output, "{}{} = make([]{}, count)", tabs, target, elem_go_type).unwrap();
+                writeln!(self.output, "{}{} = make([]{}, {})", tabs, target, elem_go_type, count_var).unwrap();
             }
-            writeln!(self.output, "{}for i := uint64(0); i < count; i++ {{", tabs).unwrap();
-            let item_target = if optional { "arr[i]" } else { &format!("{}[i]", target) };
-            self.decode_value_inline(item_target, elem_ty, indent + 1, parent_type);
+            writeln!(self.output, "{}for {} := uint64(0); {} < {}; {}++ {{", tabs, idx_var, idx_var, count_var, idx_var).unwrap();
+            let item_target = format!("{}[{}]", arr_var, idx_var);
+            self.decode_value_inline(&item_target, elem_ty, indent + 1, parent_type);
             writeln!(self.output, "{}}}", tabs).unwrap();
             if optional {
-                writeln!(self.output, "{}{} = &arr", tabs, target).unwrap();
+                writeln!(self.output, "{}{} = &{}", tabs, target, arr_var).unwrap();
             }
         } else {
             // Variable-size elements: read count prefix, then elements
             writeln!(self.output, "{}_ = {} // Outer BYTES length", tabs, length_var).unwrap();
-            writeln!(self.output, "{}count, err := __rt.DecodeLEB128(buf)", tabs).unwrap();
+            writeln!(self.output, "{}{}, err := __rt.DecodeLEB128(buf)", tabs, count_var).unwrap();
             writeln!(self.output, "{}if err != nil {{", tabs).unwrap();
             writeln!(self.output, "{}\treturn {}{{}}, err", tabs, parent_type).unwrap();
             writeln!(self.output, "{}}}", tabs).unwrap();
             if optional {
-                writeln!(self.output, "{}arr := make([]{}, count)", tabs, elem_go_type).unwrap();
+                writeln!(self.output, "{}{} := make([]{}, {})", tabs, arr_var, elem_go_type, count_var).unwrap();
             } else {
-                writeln!(self.output, "{}{} = make([]{}, count)", tabs, target, elem_go_type).unwrap();
+                writeln!(self.output, "{}{} = make([]{}, {})", tabs, target, elem_go_type, count_var).unwrap();
             }
-            writeln!(self.output, "{}for i := uint64(0); i < count; i++ {{", tabs).unwrap();
-            let item_target = if optional { "arr[i]" } else { &format!("{}[i]", target) };
-            self.decode_value_inline(item_target, elem_ty, indent + 1, parent_type);
+            writeln!(self.output, "{}for {} := uint64(0); {} < {}; {}++ {{", tabs, idx_var, idx_var, count_var, idx_var).unwrap();
+            let item_target = format!("{}[{}]", arr_var, idx_var);
+            self.decode_value_inline(&item_target, elem_ty, indent + 1, parent_type);
             writeln!(self.output, "{}}}", tabs).unwrap();
             if optional {
-                writeln!(self.output, "{}{} = &arr", tabs, target).unwrap();
+                writeln!(self.output, "{}{} = &{}", tabs, target, arr_var).unwrap();
             }
         }
     }
@@ -1135,6 +1160,13 @@ impl<'a> GoCodeGenerator<'a> {
         let tabs = "\t".repeat(indent);
         let key_go_type = self.go_type(key_ty);
         let val_go_type = self.go_type(val_ty);
+
+        // Use indent to create unique variable names to avoid shadowing in nested maps
+        let key_var = format!("k{}", indent);
+        let val_var = format!("v{}", indent);
+        let count_var = format!("count{}", indent);
+        let idx_var = format!("i{}", indent);
+        let map_var = if optional { format!("m{}", indent) } else { target.to_string() };
 
         let key_fixed = {
             let this = &self;
@@ -1160,71 +1192,63 @@ impl<'a> GoCodeGenerator<'a> {
                 _ => panic!("Unexpected fixed-size type"),
             };
             let entry_size = key_size + val_size;
-            writeln!(self.output, "{}count := {} / {}", tabs, length_var, entry_size).unwrap();
+            writeln!(self.output, "{}{} := {} / {}", tabs, count_var, length_var, entry_size).unwrap();
             if optional {
                 writeln!(
                     self.output,
-                    "{}m := make(map[{}]{}, count)",
-                    tabs, key_go_type, val_go_type
+                    "{}{} := make(map[{}]{}, {})",
+                    tabs, map_var, key_go_type, val_go_type, count_var
                 )
                 .unwrap();
             } else {
                 writeln!(
                     self.output,
-                    "{}{} = make(map[{}]{}, count)",
-                    tabs, target, key_go_type, val_go_type
+                    "{}{} = make(map[{}]{}, {})",
+                    tabs, target, key_go_type, val_go_type, count_var
                 )
                 .unwrap();
             }
-            writeln!(self.output, "{}for i := uint64(0); i < count; i++ {{", tabs).unwrap();
-            writeln!(self.output, "{}var k {}", tabs, key_go_type).unwrap();
-            writeln!(self.output, "{}var v {}", tabs, val_go_type).unwrap();
-            self.decode_value_inline("k", key_ty, indent + 1, parent_type);
-            self.decode_value_inline("v", val_ty, indent + 1, parent_type);
-            if optional {
-                writeln!(self.output, "{}m[k] = v", tabs).unwrap();
-            } else {
-                writeln!(self.output, "{}{}[k] = v", tabs, target).unwrap();
-            }
+            writeln!(self.output, "{}for {} := uint64(0); {} < {}; {}++ {{", tabs, idx_var, idx_var, count_var, idx_var).unwrap();
+            writeln!(self.output, "{}\tvar {} {}", tabs, key_var, key_go_type).unwrap();
+            writeln!(self.output, "{}\tvar {} {}", tabs, val_var, val_go_type).unwrap();
+            self.decode_value_inline(&key_var, key_ty, indent + 1, parent_type);
+            self.decode_value_inline(&val_var, val_ty, indent + 1, parent_type);
+            writeln!(self.output, "{}\t{}[{}] = {}", tabs, map_var, key_var, val_var).unwrap();
             writeln!(self.output, "{}}}", tabs).unwrap();
             if optional {
-                writeln!(self.output, "{}{} = &m", tabs, target).unwrap();
+                writeln!(self.output, "{}{} = &{}", tabs, target, map_var).unwrap();
             }
         } else {
             // Variable-size entries: read count prefix, then entries
             writeln!(self.output, "{}_ = {} // Outer BYTES length", tabs, length_var).unwrap();
-            writeln!(self.output, "{}count, err := __rt.DecodeLEB128(buf)", tabs).unwrap();
+            writeln!(self.output, "{}{}, err := __rt.DecodeLEB128(buf)", tabs, count_var).unwrap();
             writeln!(self.output, "{}if err != nil {{", tabs).unwrap();
             writeln!(self.output, "{}\treturn {}{{}}, err", tabs, parent_type).unwrap();
             writeln!(self.output, "{}}}", tabs).unwrap();
             if optional {
                 writeln!(
                     self.output,
-                    "{}m := make(map[{}]{}, count)",
-                    tabs, key_go_type, val_go_type
+                    "{}{} := make(map[{}]{}, {})",
+                    tabs, map_var, key_go_type, val_go_type, count_var
                 )
                 .unwrap();
             } else {
                 writeln!(
                     self.output,
-                    "{}{} = make(map[{}]{}, count)",
-                    tabs, target, key_go_type, val_go_type
+                    "{}{} = make(map[{}]{}, {})",
+                    tabs, target, key_go_type, val_go_type, count_var
                 )
                 .unwrap();
             }
-            writeln!(self.output, "{}for i := uint64(0); i < count; i++ {{", tabs).unwrap();
-            writeln!(self.output, "{}var k {}", tabs, key_go_type).unwrap();
-            writeln!(self.output, "{}var v {}", tabs, val_go_type).unwrap();
-            self.decode_value_inline("k", key_ty, indent + 1, parent_type);
-            self.decode_value_inline("v", val_ty, indent + 1, parent_type);
-            if optional {
-                writeln!(self.output, "{}m[k] = v", tabs).unwrap();
-            } else {
-                writeln!(self.output, "{}{}[k] = v", tabs, target).unwrap();
-            }
+            writeln!(self.output, "{}for {} := uint64(0); {} < {}; {}++ {{", tabs, idx_var, idx_var, count_var, idx_var).unwrap();
+            writeln!(self.output, "{}\tvar {} {}", tabs, key_var, key_go_type).unwrap();
+            writeln!(self.output, "{}\tvar {} {}", tabs, val_var, val_go_type).unwrap();
+            self.decode_value_inline(&key_var, key_ty, indent + 1, parent_type);
+            self.decode_value_inline(&val_var, val_ty, indent + 1, parent_type);
+            writeln!(self.output, "{}\t{}[{}] = {}", tabs, map_var, key_var, val_var).unwrap();
             writeln!(self.output, "{}}}", tabs).unwrap();
             if optional {
-                writeln!(self.output, "{}{} = &m", tabs, target).unwrap();
+                writeln!(self.output, "{}{} = &{}", tabs, target, map_var).unwrap();
             }
         }
     }

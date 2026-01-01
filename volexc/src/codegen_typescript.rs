@@ -426,6 +426,10 @@ impl<'a> TypeScriptCodeGenerator<'a> {
     }
 
     fn encode_value(&mut self, value: &str, ty: &Type, indent: usize) {
+        self.encode_value_depth(value, ty, indent, 0);
+    }
+
+    fn encode_value_depth(&mut self, value: &str, ty: &Type, indent: usize, depth: usize) {
         let spaces = "  ".repeat(indent);
         match ty {
             Type::Bool => writeln!(self.output, "{}__rt.encodeBool({}, buf);", spaces, value).unwrap(),
@@ -441,16 +445,19 @@ impl<'a> TypeScriptCodeGenerator<'a> {
             Type::F64 => writeln!(self.output, "{}__rt.encodeF64({}, buf);", spaces, value).unwrap(),
             Type::String => writeln!(self.output, "{}__rt.encodeString({}, buf);", spaces, value).unwrap(),
             Type::Array(inner) => {
+                let item_var = format!("item{}", depth);
                 writeln!(self.output, "{}__rt.encodeVarint({}.length, buf);", spaces, value).unwrap();
-                writeln!(self.output, "{}for (const item of {}) {{", spaces, value).unwrap();
-                self.encode_value("item", &inner.node, indent + 1);
+                writeln!(self.output, "{}for (const {} of {}) {{", spaces, item_var, value).unwrap();
+                self.encode_value_depth(&item_var, &inner.node, indent + 1, depth + 1);
                 writeln!(self.output, "{}}}", spaces).unwrap();
             }
             Type::Map(k, v) => {
+                let key_var = format!("k{}", depth);
+                let val_var = format!("v{}", depth);
                 writeln!(self.output, "{}__rt.encodeVarint({}.size, buf);", spaces, value).unwrap();
-                writeln!(self.output, "{}for (const [k, v] of {}) {{", spaces, value).unwrap();
-                self.encode_value("k", &k.node, indent + 1);
-                self.encode_value("v", &v.node, indent + 1);
+                writeln!(self.output, "{}for (const [{}, {}] of {}) {{", spaces, key_var, val_var, value).unwrap();
+                self.encode_value_depth(&key_var, &k.node, indent + 1, depth + 1);
+                self.encode_value_depth(&val_var, &v.node, indent + 1, depth + 1);
                 writeln!(self.output, "{}}}", spaces).unwrap();
             }
             Type::Named(name) => {
@@ -524,6 +531,10 @@ impl<'a> TypeScriptCodeGenerator<'a> {
     }
 
     fn encode_value_to_buf(&mut self, value: &str, ty: &Type, indent: usize, buf_var: &str, in_bytes_field: bool) {
+        self.encode_value_to_buf_depth(value, ty, indent, buf_var, in_bytes_field, 0);
+    }
+
+    fn encode_value_to_buf_depth(&mut self, value: &str, ty: &Type, indent: usize, buf_var: &str, in_bytes_field: bool, depth: usize) {
         let spaces = "  ".repeat(indent);
         match ty {
             Type::Bool => writeln!(self.output, "{}__rt.encodeBool({}, {});", spaces, value, buf_var).unwrap(),
@@ -550,9 +561,10 @@ impl<'a> TypeScriptCodeGenerator<'a> {
                 }
             }
             Type::Array(inner) => {
+                let item_var = format!("item{}", depth);
                 if self.schema.fixed_size(&inner.node).is_some() {
-                    writeln!(self.output, "{}for (const item of {}) {{", spaces, value).unwrap();
-                    self.encode_value_to_buf("item", &inner.node, indent + 1, buf_var, false);
+                    writeln!(self.output, "{}for (const {} of {}) {{", spaces, item_var, value).unwrap();
+                    self.encode_value_to_buf_depth(&item_var, &inner.node, indent + 1, buf_var, false, depth + 1);
                     writeln!(self.output, "{}}}", spaces).unwrap();
                 } else {
                     writeln!(
@@ -561,24 +573,26 @@ impl<'a> TypeScriptCodeGenerator<'a> {
                         spaces, value, buf_var
                     )
                     .unwrap();
-                    writeln!(self.output, "{}for (const item of {}) {{", spaces, value).unwrap();
-                    self.encode_value_to_buf("item", &inner.node, indent + 1, buf_var, false);
+                    writeln!(self.output, "{}for (const {} of {}) {{", spaces, item_var, value).unwrap();
+                    self.encode_value_to_buf_depth(&item_var, &inner.node, indent + 1, buf_var, false, depth + 1);
                     writeln!(self.output, "{}}}", spaces).unwrap();
                 }
             }
             Type::Map(k, v) => {
+                let key_var = format!("k{}", depth);
+                let val_var = format!("v{}", depth);
                 let key_fixed = self.schema.fixed_size(&k.node).is_some();
                 let val_fixed = self.schema.fixed_size(&v.node).is_some();
                 if key_fixed && val_fixed {
-                    writeln!(self.output, "{}for (const [k, v] of {}) {{", spaces, value).unwrap();
-                    self.encode_value_to_buf("k", &k.node, indent + 1, buf_var, false);
-                    self.encode_value_to_buf("v", &v.node, indent + 1, buf_var, false);
+                    writeln!(self.output, "{}for (const [{}, {}] of {}) {{", spaces, key_var, val_var, value).unwrap();
+                    self.encode_value_to_buf_depth(&key_var, &k.node, indent + 1, buf_var, false, depth + 1);
+                    self.encode_value_to_buf_depth(&val_var, &v.node, indent + 1, buf_var, false, depth + 1);
                     writeln!(self.output, "{}}}", spaces).unwrap();
                 } else {
                     writeln!(self.output, "{}__rt.encodeVarint({}.size, {});", spaces, value, buf_var).unwrap();
-                    writeln!(self.output, "{}for (const [k, v] of {}) {{", spaces, value).unwrap();
-                    self.encode_value_to_buf("k", &k.node, indent + 1, buf_var, false);
-                    self.encode_value_to_buf("v", &v.node, indent + 1, buf_var, false);
+                    writeln!(self.output, "{}for (const [{}, {}] of {}) {{", spaces, key_var, val_var, value).unwrap();
+                    self.encode_value_to_buf_depth(&key_var, &k.node, indent + 1, buf_var, false, depth + 1);
+                    self.encode_value_to_buf_depth(&val_var, &v.node, indent + 1, buf_var, false, depth + 1);
                     writeln!(self.output, "{}}}", spaces).unwrap();
                 }
             }

@@ -143,3 +143,37 @@ enum MapKeyEnum {
 struct MapEnumU32 {
     values: {MapKeyEnum: u32}
 }
+
+// Nested arrays
+struct ArrayOfArrayU8 {
+    values: [[u8]]
+}
+
+struct ArrayOfArrayString {
+    values: [[string]]
+}
+
+// Nested maps
+struct MapStringMapStringU32 {
+    values: {string: {string: u32}}
+}
+
+// Map of arrays
+struct MapStringArrayU8 {
+    values: {string: [u8]}
+}
+
+// Array of maps
+struct ArrayMapStringU32 {
+    values: [{string: u32}]
+}
+
+// Deeply nested: array of array of array
+struct ArrayOfArrayOfArrayU8 {
+    values: [[[u8]]]
+}
+
+// Mixed nesting: map with array values containing maps
+struct MapStringArrayMapStringU8 {
+    values: {string: [{string: u8}]}
+}

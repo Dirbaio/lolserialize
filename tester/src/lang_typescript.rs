@@ -91,36 +91,74 @@ interface Response {{
 }}
 
 // Convert JSON value to proper TypeScript types (Objects to Maps for map fields only)
-function convertJsonValue(val: any, depth: number = 0): any {{
+function convertJsonValue(val: any): any {{
   if (val === null || val === undefined) return val;
   if (Array.isArray(val)) {{
-    return val.map(v => convertJsonValue(v, depth + 1));
+    return val.map(v => convertJsonValue(v));
   }}
   if (typeof val === 'object') {{
     const result: any = {{}};
     for (const [k, v] of Object.entries(val)) {{
-      // Convert fields named 'values', 'map' to Maps if they're objects (but not if they have $tag, which indicates a union)
-      if ((k === 'values' || k === 'map' || k.endsWith('_map')) &&
-          v !== null && typeof v === 'object' && !Array.isArray(v) && !v.$tag) {{
-        const map = new Map();
-        for (const [mk, mv] of Object.entries(v)) {{
-          map.set(mk, convertJsonValue(mv, depth + 1));
+      // For 'values' fields - assume deeply nested maps (e.g., {{string: {{string: u32}}}}, [{{string: u32}}])
+      if (k === 'values' && v !== null && typeof v === 'object' && !('$tag' in v)) {{
+        result[k] = convertMapFieldDeep(v);
+      }}
+      // For 'map' fields or fields ending in '_map' - assume shallow maps (values might be structs)
+      else if ((k === 'map' || k.endsWith('_map')) && v !== null && typeof v === 'object' && !('$tag' in v)) {{
+        if (Array.isArray(v)) {{
+          result[k] = v.map((elem: any) => convertJsonValue(elem));
+        }} else {{
+          result[k] = convertObjectToMapShallow(v);
         }}
-        result[k] = map;
       }} else if (k === '$value' && val.$tag === 'Map' && v !== null && typeof v === 'object' && !Array.isArray(v)) {{
         // For unions with tag="Map", convert $value to Map
-        const map = new Map();
-        for (const [mk, mv] of Object.entries(v)) {{
-          map.set(mk, convertJsonValue(mv, depth + 1));
-        }}
-        result[k] = map;
+        // Don't recursively convert values - they might be structs
+        result[k] = convertObjectToMapShallow(v);
       }} else {{
-        result[k] = convertJsonValue(v, depth + 1);
+        result[k] = convertJsonValue(v);
       }}
     }}
     return result;
   }}
   return val;
+}}
+
+// Convert a map field value deeply - handles maps, arrays of maps, nested maps, etc.
+// This assumes all nested objects are maps (not structs)
+function convertMapFieldDeep(val: any): any {{
+  if (val === null || val === undefined) return val;
+  if (Array.isArray(val)) {{
+    return val.map((elem: any) => convertMapFieldDeep(elem));
+  }}
+  if (typeof val === 'object') {{
+    return convertObjectToMapDeep(val);
+  }}
+  return val;
+}}
+
+// Convert a JSON object to a Map, recursively converting nested objects to Maps
+function convertObjectToMapDeep(obj: any): Map<any, any> {{
+  const map = new Map();
+  for (const [mk, mv] of Object.entries(obj)) {{
+    if (mv !== null && typeof mv === 'object' && !Array.isArray(mv) && !('$tag' in mv)) {{
+      map.set(mk, convertObjectToMapDeep(mv));
+    }} else if (Array.isArray(mv)) {{
+      map.set(mk, convertMapFieldDeep(mv));
+    }} else {{
+      map.set(mk, convertJsonValue(mv));
+    }}
+  }}
+  return map;
+}}
+
+// Convert a JSON object to a Map without recursively converting nested objects
+// (used when values might be structs, not nested maps)
+function convertObjectToMapShallow(obj: any): Map<any, any> {{
+  const map = new Map();
+  for (const [mk, mv] of Object.entries(obj)) {{
+    map.set(mk, convertJsonValue(mv));
+  }}
+  return map;
 }}
 
 // Convert result back to JSON-serializable form (Maps to objects)
