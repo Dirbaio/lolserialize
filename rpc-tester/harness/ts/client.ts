@@ -344,6 +344,47 @@ async function testCancelStreamRequest(client: TestServiceClient): Promise<TestR
   return ok();
 }
 
+async function testCancelWhileRecvWaiting(client: TestServiceClient): Promise<TestResult> {
+  // Start a slow stream (items every 500ms - slow enough that we can cancel while waiting)
+  const stream = await client.slow_stream({ delay_ms: 500 });
+
+  // Receive the first item
+  const item = await stream.recv();
+  if (item.seq !== 0) {
+    return fail(`expected seq 0, got ${item.seq}`);
+  }
+
+  // Start a recv() that will block waiting for the next item (which won't come for 500ms)
+  const recvPromise = stream.recv();
+
+  // Wait a bit to ensure recv() is actually waiting
+  await sleep(50);
+
+  // Cancel the stream while recv() is waiting
+  await stream.cancel();
+
+  // The recv() should immediately throw with stream cancelled error
+  const startTime = Date.now();
+  try {
+    await recvPromise;
+    return fail('expected stream cancelled error from waiting recv()');
+  } catch (e) {
+    const elapsed = Date.now() - startTime;
+    // Should resolve almost immediately (not wait for the 500ms item delay)
+    if (elapsed > 100) {
+      return fail(`recv() took too long to cancel: ${elapsed}ms`);
+    }
+    if (!(e instanceof RpcError)) {
+      return fail(`expected RpcError, got ${e}`);
+    }
+    if (!e.isStreamCancelled()) {
+      return fail(`expected stream cancelled error, got '${e.message}'`);
+    }
+  }
+
+  return ok();
+}
+
 async function main() {
   const addr = process.env.SERVER_ADDR;
   if (!addr) {
@@ -402,6 +443,7 @@ async function main() {
   // Skip unary cancel test since TypeScript doesn't have proper cancellation support
   // allPassed = (await runTest('cancel_unary_request', () => testCancelUnaryRequest(client))) && allPassed;
   allPassed = (await runTest('cancel_stream_request', () => testCancelStreamRequest(client))) && allPassed;
+  allPassed = (await runTest('cancel_while_recv_waiting', () => testCancelWhileRecvWaiting(client))) && allPassed;
 
   // Close the connection
   transport.close();

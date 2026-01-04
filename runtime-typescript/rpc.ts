@@ -504,6 +504,13 @@ export class StreamReceiver {
 
     this.allPending.delete(this.requestId);
 
+    // Wake up any waiting recv() calls with a cancellation event
+    const cancelEvent: StreamEvent = { type: 'error', error: RpcError.streamCancelled() };
+    for (const waiter of this.pending.waiters) {
+      waiter(cancelEvent);
+    }
+    this.pending.waiters = [];
+
     // Send cancel message
     const buf: Uint8Array[] = [];
     buf.push(new Uint8Array([RPC_TYPE_CANCEL]));
