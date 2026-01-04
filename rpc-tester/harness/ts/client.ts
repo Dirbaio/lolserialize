@@ -319,6 +319,19 @@ async function testCancelStreamRequest(client: TestServiceClient): Promise<TestR
   // Cancel the stream
   await stream.cancel();
 
+  // After cancelling, recv() should throw "stream cancelled" error
+  try {
+    await stream.recv();
+    return fail('expected stream cancelled error after cancel()');
+  } catch (e) {
+    if (!(e instanceof RpcError)) {
+      return fail(`expected RpcError, got ${e}`);
+    }
+    if (!e.isStreamCancelled()) {
+      return fail(`expected stream cancelled error, got '${e.message}'`);
+    }
+  }
+
   // Give the server a moment to process the cancellation
   await sleep(50);
 

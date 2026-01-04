@@ -38,8 +38,16 @@ export class RpcError extends Error {
     return this.code === 0 && this.message === 'stream closed';
   }
 
+  isStreamCancelled(): boolean {
+    return this.code === 0 && this.message === 'stream cancelled';
+  }
+
   static streamClosed(): RpcError {
     return new RpcError(0, 'stream closed');
+  }
+
+  static streamCancelled(): RpcError {
+    return new RpcError(0, 'stream cancelled');
   }
 }
 
@@ -460,7 +468,7 @@ export class StreamReceiver {
 
   async recv(): Promise<Uint8Array> {
     if (this.cancelled) {
-      throw RpcError.streamClosed();
+      throw RpcError.streamCancelled();
     }
 
     // Check queue first
