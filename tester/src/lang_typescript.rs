@@ -114,6 +114,9 @@ function convertJsonValue(val: any): any {{
         // For unions with tag="Map", convert $value to Map
         // Don't recursively convert values - they might be structs
         result[k] = convertObjectToMapShallow(v);
+      }} else if (k === '$value' && val.$tag === 'Values' && v !== null && typeof v === 'object' && !('$tag' in v)) {{
+        // For unions with tag="Values", convert $value deeply (nested maps/arrays of maps)
+        result[k] = convertMapFieldDeep(v);
       }} else {{
         result[k] = convertJsonValue(v);
       }}
