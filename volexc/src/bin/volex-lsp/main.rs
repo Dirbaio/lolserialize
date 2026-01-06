@@ -24,6 +24,7 @@ fn main() -> Result<(), Box<dyn Error + Sync + Send>> {
         })),
         hover_provider: Some(HoverProviderCapability::Simple(true)),
         definition_provider: Some(OneOf::Left(true)),
+        rename_provider: Some(OneOf::Left(true)),
         ..Default::default()
     })
     .unwrap();
@@ -83,6 +84,22 @@ fn handle_request(
         Ok((id, params)) => {
             log::info!("Got hover request #{id}: {params:?}");
             let result = lsp_state.hover(params);
+            let result = serde_json::to_value(result).unwrap();
+            let resp = Response {
+                id,
+                result: Some(result),
+                error: None,
+            };
+            connection.sender.send(Message::Response(resp))?;
+            return Ok(());
+        }
+        Err(req) => req,
+    };
+
+    let req = match cast_request::<Rename>(req) {
+        Ok((id, params)) => {
+            log::info!("Got rename request #{id}: {params:?}");
+            let result = lsp_state.rename(params);
             let result = serde_json::to_value(result).unwrap();
             let resp = Response {
                 id,

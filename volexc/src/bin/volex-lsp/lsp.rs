@@ -170,6 +170,102 @@ impl VolexLsp {
             range: None,
         })
     }
+
+    pub fn rename(&self, params: RenameParams) -> Option<WorkspaceEdit> {
+        let uri = &params.text_document_position.text_document.uri;
+        let position = params.text_document_position.position;
+        let new_name = params.new_name;
+
+        let doc = self.documents.get(uri)?;
+        let schema = doc.schema.as_ref()?;
+        let offset = position_to_offset(&doc.text, position)?;
+
+        // Find what we're trying to rename
+        let item_at_position = find_item_at_position(schema, offset)?;
+
+        let old_name = match &item_at_position {
+            ItemAtPosition::TypeReference(name, _) => name.clone(),
+            ItemAtPosition::ItemDefinition(item, _) => {
+                match item {
+                    Item::Struct(s) => s.name.node.clone(),
+                    Item::Message(m) => m.name.node.clone(),
+                    Item::Enum(e) => e.name.node.clone(),
+                    Item::Union(u) => u.name.node.clone(),
+                    Item::Service(s) => s.name.node.clone(),
+                }
+            }
+        };
+
+        // Find all references to this name
+        let mut changes = Vec::new();
+
+        // Find the definition
+        if let Some(item) = schema.item(&old_name) {
+            let name_span = match &item.node {
+                Item::Struct(s) => s.name.span,
+                Item::Message(m) => m.name.span,
+                Item::Enum(e) => e.name.span,
+                Item::Union(u) => u.name.span,
+                Item::Service(s) => s.name.span,
+            };
+            changes.push(TextEdit {
+                range: span_to_range(&doc.text, name_span),
+                new_text: new_name.clone(),
+            });
+        }
+
+        // Find all references
+        for item in &schema.items {
+            match &item.node {
+                Item::Struct(s) => {
+                    for field in &s.fields {
+                        collect_type_references(&field.ty, &old_name, &new_name, &doc.text, &mut changes);
+                    }
+                }
+                Item::Message(m) => {
+                    for field in &m.fields {
+                        collect_type_references(&field.ty, &old_name, &new_name, &doc.text, &mut changes);
+                    }
+                }
+                Item::Union(u) => {
+                    for variant in &u.variants {
+                        if let Some(ref ty) = variant.ty {
+                            collect_type_references(ty, &old_name, &new_name, &doc.text, &mut changes);
+                        }
+                    }
+                }
+                Item::Service(s) => {
+                    for method in &s.methods {
+                        collect_type_references(&method.request, &old_name, &new_name, &doc.text, &mut changes);
+                        // Check response type
+                        match &method.response.node {
+                            volexc::schema::ServiceResponse::Unary(ty)
+                            | volexc::schema::ServiceResponse::Stream(ty) => {
+                                if let Type::Named(name) = ty {
+                                    if name == &old_name {
+                                        changes.push(TextEdit {
+                                            range: span_to_range(&doc.text, method.response.span),
+                                            new_text: new_name.clone(),
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        let mut workspace_changes = HashMap::new();
+        workspace_changes.insert(uri.clone(), changes);
+
+        Some(WorkspaceEdit {
+            changes: Some(workspace_changes),
+            document_changes: None,
+            change_annotations: None,
+        })
+    }
 }
 
 enum ItemAtPosition<'a> {
@@ -328,4 +424,31 @@ fn offset_to_position(text: &str, offset: usize) -> Position {
     }
 
     Position::new(line, col)
+}
+
+fn collect_type_references(
+    ty: &Spanned<Type>,
+    target_name: &str,
+    new_name: &str,
+    text: &str,
+    changes: &mut Vec<TextEdit>,
+) {
+    match &ty.node {
+        Type::Named(name) => {
+            if name == target_name {
+                changes.push(TextEdit {
+                    range: span_to_range(text, ty.span),
+                    new_text: new_name.to_string(),
+                });
+            }
+        }
+        Type::Array(inner) => {
+            collect_type_references(inner, target_name, new_name, text, changes);
+        }
+        Type::Map(key, value) => {
+            collect_type_references(key, target_name, new_name, text, changes);
+            collect_type_references(value, target_name, new_name, text, changes);
+        }
+        _ => {}
+    }
 }
