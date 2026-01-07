@@ -208,21 +208,36 @@ fn ui_tests() {
             // 2. Normalize line endings
             let actual_output = normalize_output(&actual_output, &test_file);
 
-            // Read expected output
-            let expected_output = if output_file.exists() {
-                fs::read_to_string(&output_file).expect("Failed to read .out file")
-            } else {
-                // If .out file doesn't exist, create it with the actual output
-                fs::write(&output_file, &actual_output).expect("Failed to write .out file");
-                println!("Created {}", output_file.display());
-                actual_output.clone()
-            };
+            // Check if UPDATE mode is enabled
+            let update_mode = std::env::var("UPDATE").unwrap_or_default() == "1";
 
-            // Compare outputs
-            if actual_output.trim() != expected_output.trim() {
-                failed_tests.push((test_label, expected_output, actual_output));
+            if update_mode {
+                // UPDATE=1: Create or update .out file and always pass
+                fs::write(&output_file, &actual_output).expect("Failed to write .out file");
+                if output_file.exists() {
+                    println!("✓ {} (updated)", test_label);
+                } else {
+                    println!("✓ {} (created)", test_label);
+                }
             } else {
-                println!("✓ {}", test_label);
+                // Normal mode: compare with expected output
+                if !output_file.exists() {
+                    failed_tests.push((
+                        test_label,
+                        format!("Missing .out file: {}", output_file.display()),
+                        actual_output,
+                    ));
+                    continue;
+                }
+
+                let expected_output = fs::read_to_string(&output_file).expect("Failed to read .out file");
+
+                // Compare outputs
+                if actual_output.trim() != expected_output.trim() {
+                    failed_tests.push((test_label, expected_output, actual_output));
+                } else {
+                    println!("✓ {}", test_label);
+                }
             }
         }
     }
