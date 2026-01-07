@@ -380,91 +380,89 @@ where
         .map(|items| Schema { items })
 }
 
-pub fn parse(src: &str) -> Result<Schema, Vec<crate::CompileError>> {
-    let (tokens, lex_errs) = lexer().parse(src).into_output_errors();
+fn convert_lex_error(e: Rich<char, Span>) -> crate::CompileError {
+    let mut err = crate::CompileError {
+        span: *e.span(),
+        message: e.to_string(),
+        labels: vec![],
+        notes: vec![],
+    };
 
-    if !lex_errs.is_empty() {
-        return Err(lex_errs
-            .into_iter()
-            .map(|e| {
-                let mut err = crate::CompileError {
-                    span: *e.span(),
-                    message: e.to_string(),
-                    labels: vec![],
-                    notes: vec![],
-                };
+    let label_msg = e
+        .found()
+        .map(|c| format!("Unexpected '{}'", c))
+        .unwrap_or_else(|| "Unexpected end of input".to_string());
+    err.labels.push((*e.span(), label_msg, ariadne::Color::Red));
 
-                // Add a label with what was found
-                let label_msg = e
-                    .found()
-                    .map(|c| format!("Unexpected '{}'", c))
-                    .unwrap_or_else(|| "Unexpected end of input".to_string());
-                err.labels.push((*e.span(), label_msg, ariadne::Color::Red));
+    let expected: Vec<_> = e
+        .expected()
+        .filter_map(|p| match p {
+            chumsky::error::RichPattern::Token(t) => Some(format!("'{}'", &**t)),
+            chumsky::error::RichPattern::Label(l) => Some(l.to_string()),
+            chumsky::error::RichPattern::EndOfInput => Some("end of input".to_string()),
+            _ => None,
+        })
+        .collect();
 
-                // Add expected tokens as notes
-                let expected: Vec<_> = e
-                    .expected()
-                    .filter_map(|p| match p {
-                        chumsky::error::RichPattern::Token(t) => Some(format!("'{}'", &**t)),
-                        chumsky::error::RichPattern::Label(l) => Some(l.to_string()),
-                        chumsky::error::RichPattern::EndOfInput => Some("end of input".to_string()),
-                        _ => None,
-                    })
-                    .collect();
-
-                if !expected.is_empty() {
-                    err.notes.push(format!("Expected one of: {}", expected.join(", ")));
-                }
-
-                err
-            })
-            .collect());
+    if !expected.is_empty() {
+        err.notes.push(format!("Expected one of: {}", expected.join(", ")));
     }
 
-    let tokens = tokens.unwrap();
+    err
+}
+
+fn convert_parse_error(e: Rich<Token, Span>) -> crate::CompileError {
+    let mut err = crate::CompileError {
+        span: *e.span(),
+        message: e.to_string(),
+        labels: vec![],
+        notes: vec![],
+    };
+
+    let label_msg = e
+        .found()
+        .map(|t| format!("Unexpected '{}'", t))
+        .unwrap_or_else(|| "Unexpected end of input".to_string());
+    err.labels.push((*e.span(), label_msg, ariadne::Color::Red));
+
+    let expected: Vec<_> = e
+        .expected()
+        .filter_map(|p| match p {
+            chumsky::error::RichPattern::Token(t) => Some(format!("'{}'", &**t)),
+            chumsky::error::RichPattern::Label(l) => Some(l.to_string()),
+            chumsky::error::RichPattern::EndOfInput => Some("end of input".to_string()),
+            _ => None,
+        })
+        .collect();
+
+    if !expected.is_empty() {
+        err.notes.push(format!("Expected one of: {}", expected.join(", ")));
+    }
+
+    err
+}
+
+/// Parse a Volex schema from source code.
+///
+/// Returns both a partial schema (if any was parsed) and all errors encountered.
+/// The partial schema can be used for LSP features even when there are syntax errors.
+pub fn parse(src: &str) -> (Option<Schema>, Vec<crate::CompileError>) {
+    let (tokens, lex_errs) = lexer().parse(src).into_output_errors();
+
+    let mut errors: Vec<_> = lex_errs.into_iter().map(convert_lex_error).collect();
+
+    let tokens = match tokens {
+        Some(t) => t,
+        None => return (None, errors),
+    };
+
     let len = src.len();
 
     let (schema, parse_errs) = parser()
         .parse(tokens.as_slice().map((len..len).into(), |(t, s)| (t, s)))
         .into_output_errors();
 
-    if !parse_errs.is_empty() {
-        return Err(parse_errs
-            .into_iter()
-            .map(|e| {
-                let mut err = crate::CompileError {
-                    span: *e.span(),
-                    message: e.to_string(),
-                    labels: vec![],
-                    notes: vec![],
-                };
+    errors.extend(parse_errs.into_iter().map(convert_parse_error));
 
-                // Add a label with what was found
-                let label_msg = e
-                    .found()
-                    .map(|t| format!("Unexpected '{}'", t))
-                    .unwrap_or_else(|| "Unexpected end of input".to_string());
-                err.labels.push((*e.span(), label_msg, ariadne::Color::Red));
-
-                // Add expected tokens as notes
-                let expected: Vec<_> = e
-                    .expected()
-                    .filter_map(|p| match p {
-                        chumsky::error::RichPattern::Token(t) => Some(format!("'{}'", &**t)),
-                        chumsky::error::RichPattern::Label(l) => Some(l.to_string()),
-                        chumsky::error::RichPattern::EndOfInput => Some("end of input".to_string()),
-                        _ => None,
-                    })
-                    .collect();
-
-                if !expected.is_empty() {
-                    err.notes.push(format!("Expected one of: {}", expected.join(", ")));
-                }
-
-                err
-            })
-            .collect());
-    }
-
-    Ok(schema.unwrap())
+    (schema, errors)
 }

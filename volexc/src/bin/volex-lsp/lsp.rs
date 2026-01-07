@@ -39,10 +39,7 @@ impl VolexLsp {
     }
 
     fn update_document(&mut self, uri: Url, text: String) {
-        let (schema, errors) = match volexc::compile(&text, Language::Rust) {
-            Ok(schema) => (Some(schema), Vec::new()),
-            Err(errs) => (None, errs),
-        };
+        let (schema, errors) = volexc::compile(&text, Language::Rust);
 
         self.documents.insert(uri.clone(), Document { text, schema, errors });
     }

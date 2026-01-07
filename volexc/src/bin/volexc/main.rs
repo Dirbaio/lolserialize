@@ -49,13 +49,12 @@ fn main() {
 
     let input_name = if cli.input == "-" { "<stdin>" } else { &cli.input };
 
-    let schema = match volexc::compile(&src, cli.lang) {
-        Ok(schema) => schema,
-        Err(errs) => {
-            print_errors(input_name, &src, errs);
-            std::process::exit(1);
-        }
+    let (schema, errs) = volexc::compile(&src, cli.lang);
+    if !errs.is_empty() {
+        print_errors(input_name, &src, errs);
+        std::process::exit(1);
     };
+    let schema = schema.unwrap();
 
     let code = match cli.lang {
         Language::Rust => codegen_rust::generate(&schema, cli.serde),

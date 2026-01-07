@@ -64,18 +64,19 @@ impl CompileError {
 
 /// Compile a Volex schema from source code.
 ///
-/// This performs both parsing and semantic checking, returning either a valid
-/// schema or a list of compilation errors.
-pub fn compile(src: &str, language: Language) -> Result<Schema, Vec<CompileError>> {
-    let schema = match parser::parse(src) {
-        Ok(schema) => schema,
-        Err(errs) => return Err(errs),
-    };
+/// This performs both parsing and semantic checking.
+///
+/// Returns both a partial schema (if any) and all errors encountered.
+/// The partial schema can be used for LSP features like go-to-definition
+/// and hover even when the file has syntax errors.
+pub fn compile(src: &str, language: Language) -> (Option<Schema>, Vec<CompileError>) {
+    let (schema, mut errors) = parser::parse(src);
 
-    let check_errors = checker::check(&schema, language);
-    if !check_errors.is_empty() {
-        return Err(check_errors);
+    // If we got a schema, run semantic checks on it
+    if let Some(ref schema) = schema {
+        let check_errors = checker::check(schema, language);
+        errors.extend(check_errors);
     }
 
-    Ok(schema)
+    (schema, errors)
 }
